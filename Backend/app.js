@@ -3,6 +3,13 @@ import { Server } from 'socket.io'
 import { createServer } from 'http'
 import cors from 'cors'
 
+import dotenv from 'dotenv'
+dotenv.config()
+
+import { toConnectDB } from './src/db/db.js'
+import cookieParser from 'cookie-parser'
+import routes from './src/Routes/user.routes.js'
+
 const app = express()
 const server = createServer(app)
 
@@ -15,11 +22,13 @@ const io = new Server(server, {
 
 app.use(cors())
 app.use(express.json())
+app.use(cookieParser())
 
 app.get("/", (req, res) => {
   res.send("Home")
 })
 
+// Declare registeredUsers array here globally
 let registeredUsers = []
 
 io.on("connection", (socket) => {
@@ -51,6 +60,9 @@ io.on("connection", (socket) => {
   })
 })
 
+app.use("/user", routes)
+
 server.listen(3000, () => {
+  toConnectDB()
   console.log("Server is running on http://localhost:3000")
 })

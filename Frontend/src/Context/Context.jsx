@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react'
 import { io } from 'socket.io-client'
+import axios from 'axios'
 
 export const chatContext = createContext(null)
 const socket = io("http://localhost:3000")
@@ -18,8 +19,11 @@ const Context = (props) => {
       setMessages(prev => [...prev, { fromUser, toUser: recipient, message }])
     }
 
+    if (username) {
+      socket.emit("register-user", username);
+    }
+
     const handleUpdateUsers = (users) => {
-      // Remove this user from the list if present
       setRegisteredUsers(users.filter(user => user !== username))
     }
 
@@ -30,17 +34,21 @@ const Context = (props) => {
       socket.off("private-message", handlePrivateMessage)
       socket.off("update-users", handleUpdateUsers)
     }
-  }, [username]) // <-- important: re-run when username changes
+  }, [username])
 
-  const handleRegister = (e) => {
-    e.preventDefault()
-    if (username.trim()) {
-      socket.emit("register-user", username)
-      settoggler(!toggler)
-      setIsRegistered(true)
-      console.log("Registered user:", username)
+  const handleRegister = async (formData) => {
+    try {
+      const res = await axios.post("http://localhost:3000/user/register", formData);
+      if (res.status === 201) {
+        setIsRegistered(true);
+        setUsername(formData.name);
+        console.log("User registered:", res.data);
+      }
+    } catch (err) {
+      console.error("Registration error:", err);
+      alert("Registration failed");
     }
-  }
+  };
 
   const handleSend = (e) => {
     e.preventDefault()
