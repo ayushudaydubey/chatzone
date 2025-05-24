@@ -31,8 +31,9 @@ const Login = () => {
         setIsRegistered(true);
 
         // Save token and user info
-        localStorage.setItem("chat-username", res.data.user.name);
-        localStorage.setItem("chat-token", res.data.token); // Optional
+        localStorage.setItem("username", res.data.user.name); // ✅ match with Context.js
+
+        // localStorage.setItem("chat-token", res.data.token); // Optional
 
         console.log("Login successful, cookies set");
         navigate("/chat");

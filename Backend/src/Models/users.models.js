@@ -1,23 +1,27 @@
 import mongoose from "mongoose";
 
-const userSchema  = new mongoose.Schema({
-  name:{
-    type:String
+const userSchema = new mongoose.Schema({
+  name: {
+    type: String
   },
-  mobileNo:{
-    type:Number,
-    unique:true
+  mobileNo: {
+    type: Number,
+    unique: true
   },
-  email:{
-    type:String,
-    unique:true
+  email: {
+    type: String,
+    unique: true
   },
-  password:{
-    type:String
+  password: {
+    type: String
   },
-    isOnline: { type: Boolean, default: false }
+  isOnline:
+  {
+    type: Boolean,
+    default: false
+  }
 
-},{timestamps:true})
+}, { timestamps: true })
 
-const userModel = mongoose.model("user",userSchema)
+const userModel = mongoose.model("user", userSchema)
 export default userModel

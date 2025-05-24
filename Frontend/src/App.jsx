@@ -1,6 +1,6 @@
 // App.js
 import React, { useContext } from 'react';
-import { chatContext } from './Context/Context';
+import { chatContext } from './Context/Context'; 
 import AppRoutes from './Routes/Routes';
 
 const App = () => {

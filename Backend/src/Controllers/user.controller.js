@@ -1,12 +1,15 @@
+// controllers/userController.js
+
 import userModel from "../Models/users.models.js";
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import cookieParser from "cookie-parser";
 
+// Register Controller
 export async function registerUserController(req, res) {
   try {
     const { name, email, password, mobileNo } = req.body;
 
-    // Validate required fields
     if (!name || !email || !password) {
       return res.status(400).json({ error: "Name, email, and password are required." });
     }
@@ -16,34 +19,32 @@ export async function registerUserController(req, res) {
       return res.status(400).json({ error: "User already exists with this email." });
     }
 
-    const hassPassword = await bcrypt.hash(password, 10);
-    
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const user = await userModel.create({
       name,
       email,
       mobileNo,
-      password: hassPassword,
-    
+      password: hashedPassword,
+      isOnline: false
     });
 
-    const token = jwt.sign(
-      { id: user._id, email: user.email },
-      process.env.SEC_KEY,
-      { expiresIn: '24h' } // Extended expiry time
-    );
+    // const token = jwt.sign(
+    //   { id: user._id, email: user.email },
+    //   process.env.SEC_KEY || "default_secret", // Fallback if SEC_KEY is undefined
+    //   { expiresIn: '24h' }
+    // );
 
-    // Set cookie with proper options
-    res.cookie("token", token, {
-      httpOnly: true,        // Prevents XSS attacks
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-      sameSite: 'lax',       // CSRF protection
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
-      path: '/'              // Available on all routes
-    });
+    // res.cookie("token", token, {
+    //   httpOnly: true,
+    //   secure: process.env.NODE_ENV === 'production',
+    //   sameSite: 'lax',
+    //   maxAge: 24 * 60 * 60 * 1000,
+    //   path: '/'
+    // });
 
     console.log("User registered:", user.name);
-    console.log("Token set in cookie");
-    
+
     res.status(201).json({
       message: "User registration successful",
       user: {
@@ -52,89 +53,79 @@ export async function registerUserController(req, res) {
         email: user.email,
         mobileNo: user.mobileNo
       },
-      token // Also send in response for frontend storage if needed
+      // token
     });
 
   } catch (err) {
-    console.error("Registration error:", err);
+    console.error("Registration error:", err.message);
     res.status(500).json({ error: "Internal server error during registration" });
   }
 }
 
+// Login Controller
 export async function loginUserController(req, res) {
   try {
     const { email, password } = req.body;
 
-    // Validate required fields
+    // Check required fields
     if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required." });
+      return res.status(400).json({ error: "Email and password required." });
     }
 
-    const isUser = await userModel.findOne({ email });
-    if (!isUser) {
-      return res.status(404).json({
-        message: "User not found"
-      });
+    // Check if user exists
+    const user = await userModel.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
     }
 
-    const matchPassword = await bcrypt.compare(password, isUser.password);
-    if (!matchPassword) {
-      return res.status(401).json({
-        message: "Invalid credentials"
-      });
+    // Match password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid credentials." });
     }
 
-    //  Check if user is already online
-    if (isUser.isOnline) {
-      return res.status(403).json({
-        message: `User ${email} is already logged in`
-      });
-    }
-
-    //  Update user online status
-    await userModel.findByIdAndUpdate(isUser._id, { isOnline: true });
-
-    //  Generate JWT token
+    // Create JWT token
     const token = jwt.sign(
-      { id: isUser._id, email: isUser.email },
-      process.env.SEC_KEY,
-      { expiresIn: '24h' }
+      { id: user._id, email: user.email },
+      process.env.SEC_KEY || "default_secret",
+      { expiresIn: "1d" }
     );
 
-    //  Set cookie
+    // Set token in cookie
     res.cookie("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000,
-      path: '/'
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60 * 1000, // 1 day
     });
 
-    console.log("User logged in:", isUser.name);
-    console.log("Token set in cookie");
-
+    // Send response
     res.status(200).json({
       message: "Login successful",
-      isOnline:true,
       user: {
-        id: isUser._id,
-        name: isUser.name,
-        email: isUser.email
+        id: user._id,
+        name: user.name,
+        email: user.email,
       },
-      token
+      token,
     });
-
   } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ error: "Internal server error during login" });
+    console.error("Login error:", err.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 }
 
-
-// Logout controller to clear cookie
+// Logout Controller
 export async function logoutUserController(req, res) {
   try {
-    // Clear the cookie
+    const token = req.cookies.token;
+    if (!token) {
+      return res.status(400).json({ error: "No token found" });
+    }
+
+    const decoded = jwt.verify(token, process.env.SEC_KEY || "default_secret");
+    await userModel.findByIdAndUpdate(decoded.id, { isOnline: false });
+
     res.clearCookie("token", {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -146,21 +137,21 @@ export async function logoutUserController(req, res) {
       message: "Logout successful"
     });
   } catch (err) {
-    console.error("Logout error:", err);
+    console.error("Logout error:", err.message);
     res.status(500).json({ error: "Internal server error during logout" });
   }
 }
 
-// Middleware to verify token from cookie
+// Middleware to Verify JWT Token from Cookie
 export async function verifyTokenMiddleware(req, res, next) {
   try {
     const token = req.cookies.token;
-    
+
     if (!token) {
       return res.status(401).json({ error: "Access denied. No token provided." });
     }
 
-    const decoded = jwt.verify(token, process.env.SEC_KEY);
+    const decoded = jwt.verify(token, process.env.SEC_KEY || "default_secret");
     req.user = decoded;
     next();
   } catch (err) {

@@ -1,198 +1,251 @@
-import React, { createContext, useState, useEffect, useRef } from 'react';
+ import React, { createContext, useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-// Import your custom axios instance instead of regular axios
 import axiosInstance from '../utils/axios';
-import { useNavigate } from 'react-router-dom';
 
 export const chatContext = createContext(null);
 
-// Connect socket outside the component
 const socket = io("http://localhost:3000");
 
 const Context = (props) => {
   const [username, setUsername] = useState("");
-  const [isRegistered, setIsRegistered] = useState(false);
-  const [toUser, setToUser] = useState("");
+  const [isRegistered, setIsRegistered] = useState(false)
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
-  const [registeredUsers, setRegisteredUsers] = useState([]);
-  const [toggler, settoggler] = useState(true);
   const [senderId, setSenderId] = useState("");
   const [receiverId, setReceiverId] = useState("");
+  const [users, setUsers] = useState([]); // Will now contain all users with status
+  const [toUser, setToUser] = useState("");
 
-  const navigate = useNavigate();
+  // Add messagesEndRef for auto-scrolling
   const messagesEndRef = useRef(null);
-  const messageIds = useRef(new Set());
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Initialize username from localStorage and load all users
   useEffect(() => {
-    const storedUsername = localStorage.getItem("chat-username");
-    if (storedUsername) {
-      setUsername(storedUsername);
+    const savedUsername = localStorage.getItem("username");
+    if (savedUsername) {
+      setUsername(savedUsername);
+      // Register user with socket when component mounts
+      socket.emit("register-user", savedUsername);
     }
+    
+    // Load all registered users when component mounts
+    loadAllUsers();
   }, []);
 
-  // Load chat history - using axiosInstance instead of axios
-  useEffect(() => {
-    const fetchChatHistory = async () => {
-      if (senderId && receiverId) {
-        try {
-          // Using axiosInstance - cookies will be sent automatically
-          const res = await axiosInstance.get(`/user/messages?senderId=${senderId}&receiverId=${receiverId}`);
-          if (res.data && Array.isArray(res.data)) {
-            messageIds.current.clear();
-            
-            const formattedMessages = res.data.map(msg => {
-              const messageId = `${msg.senderId}-${msg.receiverId}-${msg.message}-${msg.timeStamp}`;
-              messageIds.current.add(messageId);
-              
-              return {
-                id: messageId,
-                fromUser: msg.senderId,
-                toUser: msg.receiverId,
-                message: msg.message,
-                timestamp: msg.timeStamp
-              };
-            });
-            setMessages(formattedMessages);
-          }
-        } catch (err) {
-          console.error("Error fetching chat history:", err);
-        }
+  // Function to load all registered users
+  const loadAllUsers = async () => {
+    try {
+      const response = await axiosInstance.get('/user/all-users');
+      if (response.data) {
+        // Convert to user objects with default offline status
+        const allUsersWithStatus = response.data.map(username => ({
+          username,
+          isOnline: false,
+          lastSeen: null
+        }));
+        setUsers(allUsersWithStatus);
       }
-    };
-
-    fetchChatHistory();
-  }, [senderId, receiverId]);
-
-  useEffect(() => {
-    if (username) {
-      localStorage.setItem("chat-username", username);
-      socket.emit("register-user", username);
+    } catch (error) {
+      console.error("Error loading all users:", error);
     }
+  };
 
-    const handlePrivateMessage = ({ fromUser, toUser: recipient, message, timestamp }) => {
-      const messageId = `${fromUser}-${recipient}-${message}-${timestamp || Date.now()}`;
-      
-      if (!messageIds.current.has(messageId)) {
-        messageIds.current.add(messageId);
+  // Socket event listeners
+  useEffect(() => {
+    // Listen for private messages
+    socket.on("private-message", (messageData) => {
+      console.log("Received private message:", messageData);
+      setMessages(prev => {
+        // Check if message already exists to avoid duplicates
+        const exists = prev.some(msg => 
+          msg.fromUser === messageData.fromUser && 
+          msg.toUser === messageData.toUser && 
+          msg.message === messageData.message &&
+          Math.abs(new Date(msg.timestamp) - new Date(messageData.timestamp)) < 1000
+        );
         
-        setMessages(prev => [...prev, { 
-          id: messageId,
-          fromUser, 
-          toUser: recipient, 
-          message, 
-          timestamp: timestamp || Date.now() 
-        }]);
+        if (!exists) {
+          return [...prev, messageData];
+        }
+        return prev;
+      });
+    });
+
+    // Listen for user list updates with online status
+    socket.on("update-users", (usersWithStatus) => {
+      console.log("Updated user list with status:", usersWithStatus);
+      
+      if (Array.isArray(usersWithStatus)) {
+        // Filter out current user and update the users list
+        const filteredUsers = usersWithStatus
+          .filter(user => {
+            const userName = typeof user === 'object' ? user.username : user;
+            return userName !== username;
+          })
+          .map(user => {
+            if (typeof user === 'object') {
+              return user; // Already has status info
+            } else {
+              // Convert string to object with status
+              return {
+                username: user,
+                isOnline: true, // If we receive it in update, assume online
+                lastSeen: new Date()
+              };
+            }
+          });
+        
+        setUsers(filteredUsers);
       }
-    };
+    });
 
-    const handleUpdateUsers = (users) => {
-      setRegisteredUsers(users.filter(user => user !== username));
-    };
-
-    socket.on("private-message", handlePrivateMessage);
-    socket.on("update-users", handleUpdateUsers);
-
+    // Cleanup listeners
     return () => {
-      socket.off("private-message", handlePrivateMessage);
-      socket.off("update-users", handleUpdateUsers);
+      socket.off("private-message");
+      socket.off("update-users");
     };
   }, [username]);
 
-  // Register function - using axiosInstance
-  const handleRegister = async (formData) => {
+  // Load chat history when toUser changes
+  useEffect(() => {
+    if (username && toUser) {
+      loadChatHistory();
+    }
+  }, [username, toUser]);
+
+  // Function to load chat history from server
+  const loadChatHistory = async () => {
     try {
-      const res = await axiosInstance.post("/user/register", formData);
-      if (res.status === 201) {
-        // Don't set registration state immediately
-        // Just return success - let the component handle navigation
-        return true;
+      const response = await axiosInstance.get(`/user/messages?senderId=${username}&receiverId=${toUser}`);
+      if (response.data) {
+        setMessages(response.data);
       }
-    } catch (err) {
-      console.error("Registration error:", err);
-      return false;
+    } catch (error) {
+      console.error("Error loading chat history:", error);
     }
   };
 
-  // Send message function - using axiosInstance
+  const register = async (userData) => {
+    try {
+      const response = await axiosInstance.post("/user/register", userData);
+      if (response.status === 200 || response.status === 201) {
+        // Reload all users after successful registration
+        await loadAllUsers();
+        return { success: true };
+      }
+      return { success: false, error: "Registration failed" };
+    } catch (error) {
+      let errorMessage = "Registration failed";
+      if (error.response?.data) {
+        errorMessage = error.response.data.message || error.response.data.error || errorMessage;
+      }
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  const login = async (userData) => {
+    try {
+      const response = await axiosInstance.post("/user/login", userData);
+      if (response.status === 200 && response.data.user) {
+        const userName = response.data.user.name;
+        setUsername(userName);
+        localStorage.setItem("username", userName);
+        
+        // Register user with socket after successful login
+        socket.emit("register-user", userName);
+        setIsRegistered(true);
+        
+        // Reload all users to get updated status
+        await loadAllUsers();
+        
+        return { success: true };
+      }
+      return { success: false, error: "Login failed" };
+    } catch (error) {
+      let errorMessage = "Login failed";
+      if (error.response?.data) {
+        errorMessage = error.response.data.message || error.response.data.error || errorMessage;
+      }
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  // Updated handleSend function to use private-message event
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!message.trim()) return;
+    if (!message.trim() || !toUser) return;
+
+    const messageData = {
+      fromUser: username,
+      toUser: toUser,
+      message: message.trim()
+    };
 
     try {
-      // Using axiosInstance - cookies will be sent automatically
-      const res = await axiosInstance.post("/user/message", {
-        senderId,
-        receiverId,
-        message
-      });
-
-      socket.emit("private-message", {
-        fromUser: username,
-        toUser,
-        message
-      });
-
+      // Send via socket (works for both online and offline users)
+      socket.emit("private-message", messageData);
+      
+      // Clear the message input
       setMessage("");
-    } catch (err) {
-      console.error("Error sending message", err);
+      
+      console.log("Message sent:", messageData);
+    } catch (error) {
+      console.error("Send message error:", error);
       alert("Failed to send message");
     }
   };
 
-  // Login function - using axiosInstance
-  const handleLogin = async (formData) => {
-    try {
-      const res = await axiosInstance.post("/user/login", formData);
-      if (res.status === 200) {
-        setUsername(res.data.user.name);
-        return true;
-      }
-    } catch (err) {
-      console.error("Login error:", err);
-      return false;
-    }
+  const logout = () => {
+    // Disconnect from socket
+    socket.disconnect();
+    
+    // Clear all state
+    setUsername("");
+    setMessages([]);
+    setUsers([]);
+    setToUser("");
+    setIsRegistered(false);
+    
+    // Clear localStorage
+    localStorage.removeItem("username");
+    
+    // Reconnect socket for next user
+    socket.connect();
   };
 
-  // Logout function - using axiosInstance
-  const handleLogout = async () => {
-    try {
-      await axiosInstance.post("/user/logout");
-      setUsername("");
-      setIsRegistered(false);
-      localStorage.removeItem("chat-username");
-      navigate("/login");
-    } catch (err) {
-      console.error("Logout error:", err);
-    }
+  const contextValue = {
+    username,
+    setUsername,
+    isRegistered,
+    setIsRegistered,
+    senderId,
+    setSenderId,
+    receiverId,
+    setReceiverId,
+    message,
+    setMessage,
+    messages,
+    setMessages,
+    users, // Now contains all users with online status
+    toUser,
+    setToUser,
+    register,
+    login,
+    handleSend,
+    logout,
+    socket,
+    messagesEndRef,
+    loadChatHistory,
+    loadAllUsers // Export this for manual refresh
   };
 
   return (
-    <chatContext.Provider value={{
-      username, setUsername,
-      isRegistered, setIsRegistered,
-      toUser, setToUser,
-      message, setMessage,
-      messages, setMessages,
-      registeredUsers,
-      handleRegister, 
-      handleSend,
-      handleLogin,
-      handleLogout,
-      toggler, settoggler,
-      senderId, setSenderId,
-      receiverId, setReceiverId,
-      socket,
-      messagesEndRef
-    }}>
+    <chatContext.Provider value={contextValue}>
       {props.children}
     </chatContext.Provider>
   );
