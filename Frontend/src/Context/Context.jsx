@@ -1,6 +1,6 @@
- import React, { createContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import axiosInstance from '../utils/axios';
+import axiosInstance, { fileUploadInstance } from '../utils/axios';
 
 export const chatContext = createContext(null);
 
@@ -13,10 +13,9 @@ const Context = (props) => {
   const [messages, setMessages] = useState([]);
   const [senderId, setSenderId] = useState("");
   const [receiverId, setReceiverId] = useState("");
-  const [users, setUsers] = useState([]); // Will now contain all users with status
+  const [users, setUsers] = useState([]);
   const [toUser, setToUser] = useState("");
 
-  // Add messagesEndRef for auto-scrolling
   const messagesEndRef = useRef(null);
 
   // Auto-scroll to bottom when messages change
@@ -29,11 +28,9 @@ const Context = (props) => {
     const savedUsername = localStorage.getItem("username");
     if (savedUsername) {
       setUsername(savedUsername);
-      // Register user with socket when component mounts
       socket.emit("register-user", savedUsername);
     }
     
-    // Load all registered users when component mounts
     loadAllUsers();
   }, []);
 
@@ -42,7 +39,6 @@ const Context = (props) => {
     try {
       const response = await axiosInstance.get('/user/all-users');
       if (response.data) {
-        // Convert to user objects with default offline status
         const allUsersWithStatus = response.data.map(username => ({
           username,
           isOnline: false,
@@ -81,7 +77,6 @@ const Context = (props) => {
       console.log("Updated user list with status:", usersWithStatus);
       
       if (Array.isArray(usersWithStatus)) {
-        // Filter out current user and update the users list
         const filteredUsers = usersWithStatus
           .filter(user => {
             const userName = typeof user === 'object' ? user.username : user;
@@ -89,12 +84,11 @@ const Context = (props) => {
           })
           .map(user => {
             if (typeof user === 'object') {
-              return user; // Already has status info
+              return user;
             } else {
-              // Convert string to object with status
               return {
                 username: user,
-                isOnline: true, // If we receive it in update, assume online
+                isOnline: true,
                 lastSeen: new Date()
               };
             }
@@ -130,11 +124,75 @@ const Context = (props) => {
     }
   };
 
+  // Updated function to handle file upload with progress tracking
+  const handleFileUpload = async (file, onProgress) => {
+    if (!toUser) {
+      throw new Error('No recipient selected');
+    }
+
+    // Validate file size (50MB limit)
+    if (file.size > 50 * 1024 * 1024) {
+      throw new Error('File size must be less than 50MB');
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+      throw new Error('Only image and video files are allowed');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('senderId', username);
+    formData.append('receiverId', toUser);
+
+    try {
+      console.log('Starting file upload...', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      });
+
+      const response = await fileUploadInstance.post('/user/upload-file', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            onProgress(percentCompleted);
+            console.log(`Upload progress: ${percentCompleted}%`);
+          }
+        },
+        // Override timeout for this specific request if needed
+        timeout: 300000, // 5 minutes for very large files
+      });
+
+      if (response.data.success) {
+        console.log('File uploaded successfully:', response.data.fileUrl);
+        return response.data;
+      } else {
+        throw new Error('Upload failed: ' + (response.data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('File upload error:', error);
+      
+      // Provide more specific error messages
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Upload timeout: The file upload took too long. Please try with a smaller file.');
+      } else if (error.response?.status === 413) {
+        throw new Error('File too large: The file exceeds the maximum allowed size.');
+      } else if (error.response?.data?.error) {
+        throw new Error(error.response.data.error);
+      } else {
+        throw new Error('Failed to upload file: ' + error.message);
+      }
+    }
+  };
+
   const register = async (userData) => {
     try {
       const response = await axiosInstance.post("/user/register", userData);
       if (response.status === 200 || response.status === 201) {
-        // Reload all users after successful registration
         await loadAllUsers();
         return { success: true };
       }
@@ -156,11 +214,9 @@ const Context = (props) => {
         setUsername(userName);
         localStorage.setItem("username", userName);
         
-        // Register user with socket after successful login
         socket.emit("register-user", userName);
         setIsRegistered(true);
         
-        // Reload all users to get updated status
         await loadAllUsers();
         
         return { success: true };
@@ -187,12 +243,8 @@ const Context = (props) => {
     };
 
     try {
-      // Send via socket (works for both online and offline users)
       socket.emit("private-message", messageData);
-      
-      // Clear the message input
       setMessage("");
-      
       console.log("Message sent:", messageData);
     } catch (error) {
       console.error("Send message error:", error);
@@ -201,20 +253,16 @@ const Context = (props) => {
   };
 
   const logout = () => {
-    // Disconnect from socket
     socket.disconnect();
     
-    // Clear all state
     setUsername("");
     setMessages([]);
     setUsers([]);
     setToUser("");
     setIsRegistered(false);
     
-    // Clear localStorage
     localStorage.removeItem("username");
     
-    // Reconnect socket for next user
     socket.connect();
   };
 
@@ -231,17 +279,18 @@ const Context = (props) => {
     setMessage,
     messages,
     setMessages,
-    users, // Now contains all users with online status
+    users,
     toUser,
     setToUser,
     register,
     login,
     handleSend,
+    handleFileUpload, // Updated function with progress tracking
     logout,
     socket,
     messagesEndRef,
     loadChatHistory,
-    loadAllUsers // Export this for manual refresh
+    loadAllUsers
   };
 
   return (

@@ -10,7 +10,7 @@ const ChatPage = () => {
     users, setToUser, toUser, username,
     message, setMessage, handleSend, messages,
     setUsername, senderId, setSenderId, receiverId, setReceiverId,
-    socket, messagesEndRef
+    socket, messagesEndRef, handleFileUpload // Add handleFileUpload here
   } = useContext(chatContext);
 
   useEffect(() => {
@@ -39,8 +39,22 @@ const ChatPage = () => {
       <UserList users={users} toUser={toUser} setToUser={setToUser} formatTime={formatTime} />
       <div className="col-span-3 flex flex-col relative overflow-hidden">
         <ChatHeader toUser={toUser} users={users} />
-        <ChatMessages messages={messages} username={username} toUser={toUser} formatTime={formatTime} formatDate={formatDate} messagesEndRef={messagesEndRef} />
-        <ChatInput handleSend={handleSend} message={message} setMessage={setMessage} toUser={toUser} users={users} />
+        <ChatMessages 
+          messages={messages} 
+          username={username} 
+          toUser={toUser} 
+          formatTime={formatTime} 
+          formatDate={formatDate} 
+          messagesEndRef={messagesEndRef} 
+        />
+        <ChatInput 
+          handleSend={handleSend} 
+          message={message} 
+          setMessage={setMessage} 
+          toUser={toUser} 
+          users={users}
+          handleFileUpload={handleFileUpload} // Pass handleFileUpload as prop
+        />
       </div>
     </div>
   );
