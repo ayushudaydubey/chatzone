@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../utils/axios';
+import moonGirl from '../assets/login.avif';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -13,16 +14,15 @@ const Register = () => {
   });
 
   const handleChange = (e) => {
-    setFormData({ 
-      ...formData, 
-      [e.target.name]: e.target.value 
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
     });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Simple validation
+
     if (!formData.name || !formData.email || !formData.password) {
       alert("Please fill all required fields");
       return;
@@ -36,105 +36,110 @@ const Register = () => {
     setLoading(true);
 
     try {
-      console.log('Sending registration data:', formData);
-      
-      const response = await axiosInstance.post("/user/register", formData);
-      
-      console.log('Registration response:', response);
-      
-      // Success
+      await axiosInstance.post("/user/register", formData);
       alert("Registration successful!");
-      
-      // Clear form
+
       setFormData({
         name: '',
         mobileNo: '',
         email: '',
         password: ''
       });
-      
-      // Go to login page
+
       navigate("/login");
-      
     } catch (error) {
       console.error("Registration failed:", error);
-      
-      // Show error message
-      if (error.response && error.response.data) {
-        alert(error.response.data.message || error.response.data.error || "Registration failed");
-      } else if (error.message) {
-        alert("Error: " + error.message);
-      } else {
-        alert("Registration failed. Please try again.");
-      }
+      alert(error.response?.data?.message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="backdrop-blur-xl bg-white/10 p-8 rounded-xl w-96 text-center border border-blue-200 shadow-lg mx-auto mt-10">
-      <h1 className="text-3xl font-bold text-zinc-100 mb-4">Create Account</h1>
-      <p className="text-md text-zinc-100 mb-4">Join the chat</p>
+    <div className="min-h-screen w-full bg-stone-950 overflow-hidden">
+      <div className="flex flex-col md:flex-row w-full h-full">
 
-      <form onSubmit={handleSubmit}>
-        <input 
-          type="text" 
-          name="name" 
-          placeholder="Your Name *" 
-          value={formData.name} 
-          onChange={handleChange} 
-          className="w-full p-3 text-blue-100 bg-zinc-800 border border-gray-300 rounded-md mb-4 outline-none" 
-          required
-        />
-        
-        <input 
-          type="text" 
-          name="mobileNo" 
-          placeholder="Mobile Number (optional)" 
-          value={formData.mobileNo} 
-          onChange={handleChange} 
-          className="w-full p-3 text-blue-100 bg-zinc-800 border border-gray-300 rounded-md mb-4 outline-none" 
-        />
-        
-        <input 
-          type="email" 
-          name="email" 
-          placeholder="Email Address *" 
-          value={formData.email} 
-          onChange={handleChange} 
-          className="w-full p-3 text-blue-100 bg-zinc-800 border border-gray-300 rounded-md mb-4 outline-none" 
-          required
-        />
-        
-        <input 
-          type="password" 
-          name="password" 
-          placeholder="Password (min 6 chars) *" 
-          value={formData.password} 
-          onChange={handleChange} 
-          className="w-full p-3 text-blue-100 bg-zinc-800 border border-gray-300 rounded-md mb-4 outline-none" 
-          required
-        />
+        {/* Image Panel (Visible on all screens) */}
+        <div className="w-full md:w-1/2 h-72 md:h-auto">
+          <img
+            className="w-full h-full object-cover object-center"
+            src={moonGirl}
+            alt="Login Illustration"
+          />
+        </div>
 
-        <button 
-          type="submit" 
-          disabled={loading}
-          className="w-full bg-blue-600 text-white font-semibold py-3 rounded-md hover:bg-blue-700 transition disabled:opacity-50 mb-3"
-        >
-          {loading ? "Creating Account..." : "Create Account"}
-        </button>
-      </form>
+        {/* Form Panel */}
+        <div className="w-full md:w-1/2 flex flex-col items-center justify-center px-6 py-8 text-blue-200">
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">Create Your Account</h1>
+          <p className="text-center text-zinc-400 mb-6 text-sm md:text-base">
+            Join ChatZone today and start meaningful conversations instantly. <br className="hidden sm:block" />
+            It only takes a minute to get started!
+          </p>
 
-      <p className="text-zinc-300">
-        Already have an account?{" "}
-        <button
-          onClick={() => navigate("/login")}
-          className="text-blue-400 hover:text-blue-300 underline"
-        >
-          Login here
-        </button>
-      </p>
+          <form onSubmit={handleSubmit} className="w-full max-w-sm">
+            <input
+              type="text"
+              name="name"
+              placeholder="Your Name"
+              value={formData.name}
+              onChange={handleChange}
+              className="w-full px-4 py-3 mb-4 bg-zinc-900 border border-blue-200 rounded-md outline-none text-sm"
+              required
+            />
+
+            <input
+              type="text"
+              name="mobileNo"
+              placeholder="Mobile Number"
+              value={formData.mobileNo}
+              onChange={handleChange}
+              className="w-full px-4 py-3 mb-4 bg-zinc-900 border border-blue-200 rounded-md outline-none text-sm"
+            />
+
+            <input
+              type="email"
+              name="email"
+              placeholder="Email Address"
+              value={formData.email}
+              onChange={handleChange}
+              className="w-full px-4 py-3 mb-4 bg-zinc-900 border border-blue-200 rounded-md outline-none text-sm"
+              required
+            />
+
+            <input
+              type="password"
+              name="password"
+              placeholder="Password (min 6 chars)"
+              value={formData.password}
+              onChange={handleChange}
+              className="w-full px-4 py-3 mb-4 bg-zinc-900 border border-blue-200 rounded-md outline-none text-sm"
+              required
+            />
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full border-2 border-blue-200 text-white font-semibold py-2 rounded-md hover:bg-blue-400 hover:text-black hover:border-blue-400 transition disabled:opacity-50"
+            >
+              {loading ? "Creating Account..." : "Create Account"}
+            </button>
+          </form>
+
+          <p className="text-sm text-gray-400 mt-4">
+            Already have an account?{" "}
+            <button
+              onClick={() => navigate("/login")}
+              className="text-blue-500 cursor-pointer hover:underline"
+            >
+              Login here
+            </button>
+          </p>
+
+          <p className="text-xs text-zinc-500 mt-2 flex flex-wrap justify-center gap-2 text-center">
+            <span>Fast onboarding</span> • <span>Secure data</span> • <span>Real-time chat</span>
+          </p>
+        </div>
+      </div>
     </div>
   );
 };

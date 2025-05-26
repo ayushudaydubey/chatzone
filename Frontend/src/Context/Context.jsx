@@ -15,6 +15,10 @@ const Context = (props) => {
   const [receiverId, setReceiverId] = useState("");
   const [users, setUsers] = useState([]);
   const [toUser, setToUser] = useState("");
+  
+  // New state for tracking unread messages
+  const [unreadMessages, setUnreadMessages] = useState({}); // { username: count }
+  const [lastMessages, setLastMessages] = useState({}); // { username: { message, timestamp } }
 
   const messagesEndRef = useRef(null);
 
@@ -39,16 +43,38 @@ const Context = (props) => {
     try {
       const response = await axiosInstance.get('/user/all-users');
       if (response.data) {
-        const allUsersWithStatus = response.data.map(username => ({
-          username,
-          isOnline: false,
-          lastSeen: null
-        }));
+        const allUsersWithStatus = response.data
+          .filter(userName => userName !== username && userName.trim() !== '') // fillter and empty current username
+          .map(userName => ({
+            username: userName,
+            isOnline: false,
+            lastSeen: null
+          }));
         setUsers(allUsersWithStatus);
+        console.log("All users loaded (excluding self):", allUsersWithStatus);
       }
     } catch (error) {
       console.error("Error loading all users:", error);
     }
+  };
+
+  // Function to mark messages as read for a specific user
+  const markMessagesAsRead = (fromUser) => {
+    setUnreadMessages(prev => {
+      const updated = { ...prev };
+      delete updated[fromUser];
+      return updated;
+    });
+  };
+
+  // Function to get unread count for a user
+  const getUnreadCount = (fromUser) => {
+    return unreadMessages[fromUser] || 0;
+  };
+
+  // Function to get last message for a user
+  const getLastMessage = (fromUser) => {
+    return lastMessages[fromUser] || null;
   };
 
   // Socket event listeners
@@ -56,6 +82,7 @@ const Context = (props) => {
     // Listen for private messages
     socket.on("private-message", (messageData) => {
       console.log("Received private message:", messageData);
+      
       setMessages(prev => {
         // Check if message already exists to avoid duplicates
         const exists = prev.some(msg => 
@@ -70,6 +97,32 @@ const Context = (props) => {
         }
         return prev;
       });
+
+      // Update unread messages count and last message if not currently chatting with sender
+      if (messageData.fromUser !== toUser && messageData.fromUser !== username) {
+        setUnreadMessages(prev => ({
+          ...prev,
+          [messageData.fromUser]: (prev[messageData.fromUser] || 0) + 1
+        }));
+
+        // Update last message for this user
+        setLastMessages(prev => ({
+          ...prev,
+          [messageData.fromUser]: {
+            message: messageData.message,
+            timestamp: messageData.timestamp,
+            isFile: messageData.isFile || false
+          }
+        }));
+
+        // Show browser notification if supported
+        if (Notification.permission === 'granted') {
+          new Notification(`New message from ${messageData.fromUser}`, {
+            body: messageData.isFile ? '📎 Sent a file' : messageData.message,
+            icon: '/favicon.ico' // Add your app icon path
+          });
+        }
+      }
     });
 
     // Listen for user list updates with online status
@@ -80,30 +133,84 @@ const Context = (props) => {
         const filteredUsers = usersWithStatus
           .filter(user => {
             const userName = typeof user === 'object' ? user.username : user;
-            return userName !== username;
+            // valid username and filter 
+            return userName !== username && userName && userName.trim() !== '';
           })
           .map(user => {
             if (typeof user === 'object') {
-              return user;
+              return {
+                ...user,
+                isOnline: user.isOnline !== undefined ? user.isOnline : true
+              };
             } else {
               return {
                 username: user,
-                isOnline: true,
+                isOnline: true, // users come onlie from socket
                 lastSeen: new Date()
               };
             }
           });
         
+        console.log("Filtered online users (excluding self):", filteredUsers);
         setUsers(filteredUsers);
       }
+    });
+
+    // Listen for user disconnect
+    socket.on("user-disconnected", (disconnectedUser) => {
+      console.log("User disconnected:", disconnectedUser);
+      setUsers(prev => prev.map(user => {
+        const userName = typeof user === 'object' ? user.username : user;
+        if (userName === disconnectedUser) {
+          return typeof user === 'object' ? 
+            { ...user, isOnline: false, lastSeen: new Date() } : 
+            { username: user, isOnline: false, lastSeen: new Date() };
+        }
+        return user;
+      }));
+    });
+
+    // Listen for user reconnect
+    socket.on("user-connected", (connectedUser) => {
+      console.log("User connected:", connectedUser);
+      setUsers(prev => {
+        const existingUserIndex = prev.findIndex(user => {
+          const userName = typeof user === 'object' ? user.username : user;
+          return userName === connectedUser;
+        });
+
+        if (existingUserIndex !== -1) {
+          // Update existing user
+          const updatedUsers = [...prev];
+          updatedUsers[existingUserIndex] = typeof prev[existingUserIndex] === 'object' ? 
+            { ...prev[existingUserIndex], isOnline: true, lastSeen: new Date() } :
+            { username: prev[existingUserIndex], isOnline: true, lastSeen: new Date() };
+          return updatedUsers;
+        } else {
+          // Add new user if not exists and not self
+          if (connectedUser !== username) {
+            return [...prev, { username: connectedUser, isOnline: true, lastSeen: new Date() }];
+          }
+        }
+        return prev;
+      });
     });
 
     // Cleanup listeners
     return () => {
       socket.off("private-message");
       socket.off("update-users");
+      socket.off("user-disconnected");
+      socket.off("user-connected");
     };
-  }, [username]);
+  }, [username, toUser]);
+
+  // Mark messages as read when switching to a user
+  useEffect(() => {
+    if (toUser) {
+      markMessagesAsRead(toUser);
+    }
+  }, [toUser]);
 
   // Load chat history when toUser changes
   useEffect(() => {
@@ -123,6 +230,13 @@ const Context = (props) => {
       console.error("Error loading chat history:", error);
     }
   };
+
+  // Request notification permission on component mount
+  useEffect(() => {
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
 
   // Updated function to handle file upload with progress tracking
   const handleFileUpload = async (file, onProgress) => {
@@ -260,15 +374,31 @@ const Context = (props) => {
     setUsers([]);
     setToUser("");
     setIsRegistered(false);
+    setUnreadMessages({});
+    setLastMessages({});
     
     localStorage.removeItem("username");
     
     socket.connect();
   };
 
+  // Helper function to get online users only
+  const getOnlineUsers = () => {
+    return users.filter(user => {
+      const userObj = typeof user === 'object' ? user : { username: user, isOnline: true };
+      return userObj.isOnline;
+    });
+  };
+
+  // Helper function to get total unread messages count
+  const getTotalUnreadCount = () => {
+    return Object.values(unreadMessages).reduce((total, count) => total + count, 0);
+  };
+
   const contextValue = {
     username,
     setUsername,
+
     isRegistered,
     setIsRegistered,
     senderId,
@@ -290,7 +420,16 @@ const Context = (props) => {
     socket,
     messagesEndRef,
     loadChatHistory,
-    loadAllUsers
+    loadAllUsers,
+    getOnlineUsers, // Helper function for getting online users
+    
+    // New message indicator functions
+    unreadMessages,
+    lastMessages,
+    markMessagesAsRead,
+    getUnreadCount,
+    getLastMessage,
+    getTotalUnreadCount
   };
 
   return (

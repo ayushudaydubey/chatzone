@@ -7,7 +7,7 @@ const App = () => {
   const { isRegistered, toggler } = useContext(chatContext);
 
   return (
-    <div className="min-h-screen bg-zinc-950 bg-cover bg-center flex items-center justify-center">
+    <div className="h-screen bg-zinc-950 bg-cover bg-center flex items-center justify-center overflow-hidden">
       <AppRoutes />
     </div>
   );

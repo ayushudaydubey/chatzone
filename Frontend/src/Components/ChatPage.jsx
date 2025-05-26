@@ -1,22 +1,37 @@
-import React, { useContext, useEffect } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { chatContext } from '../Context/Context';
 import UserList from '../Components/UserList';
 import ChatHeader from '../Components/ChatHeader';
 import ChatMessages from '../Components/ChatMessages';
 import ChatInput from '../Components/ChatInput';
+import './ChatPage.css'
 
 const ChatPage = () => {
+  const [isUserListOpen, setIsUserListOpen] = useState(false);
+  
   const {
     users, setToUser, toUser, username,
     message, setMessage, handleSend, messages,
     setUsername, senderId, setSenderId, receiverId, setReceiverId,
-    socket, messagesEndRef, handleFileUpload // Add handleFileUpload here
+    socket, messagesEndRef, handleFileUpload
   } = useContext(chatContext);
 
   useEffect(() => {
     setSenderId(username);
     setReceiverId(toUser);
   }, [toUser, username, setSenderId, setReceiverId]);
+
+  // Close user list when screen size changes to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) { // lg breakpoint
+        setIsUserListOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
@@ -34,26 +49,62 @@ const ChatPage = () => {
     else return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  const handleToggleUserList = () => {
+    setIsUserListOpen(!isUserListOpen);
+  };
+
+  const handleCloseUserList = () => {
+    setIsUserListOpen(false);
+  };
+
   return (
-    <div className="w-full max-w-8xl h-[100vh] backdrop-blur-3xl shadow-lg rounded-xl grid grid-cols-4 overflow-hidden">
-      <UserList users={users} toUser={toUser} setToUser={setToUser} formatTime={formatTime} />
-      <div className="col-span-3 flex flex-col relative overflow-hidden">
-        <ChatHeader toUser={toUser} users={users} />
-        <ChatMessages 
-          messages={messages} 
-          username={username} 
+    <div className="w-full h-screen  shadow-lg lg:rounded-xl lg:grid lg:grid-cols-4 overflow-hidden">
+      {/* User List - Hidden on mobile by default, shown as overlay when toggled */}
+      <div className="hidden lg:block">
+        <UserList 
+          users={users} 
           toUser={toUser} 
-          formatTime={formatTime} 
-          formatDate={formatDate} 
-          messagesEndRef={messagesEndRef} 
+          setToUser={setToUser} 
+          formatTime={formatTime}
+          isOpen={isUserListOpen}
+          onClose={handleCloseUserList}
+        />
+      </div>
+
+      {/* Mobile User List Overlay */}
+      <div className="lg:hidden">
+        <UserList 
+          users={users} 
+          toUser={toUser} 
+          setToUser={setToUser} 
+          formatTime={formatTime}
+          isOpen={isUserListOpen}
+          onClose={handleCloseUserList}
+        />
+      </div>
+
+      {/* Chat Area */}
+      <div className="flex flex-col relative overflow-hidden lg:col-span-3 h-full">
+        <ChatHeader 
+          toUser={toUser} 
+          users={users} 
+          onToggleUserList={handleToggleUserList}
+        />
+        <ChatMessages 
+          messages={messages}
+          username={username}
+          toUser={toUser}
+          formatTime={formatTime}
+          formatDate={formatDate}
+          messagesEndRef={messagesEndRef}
         />
         <ChatInput 
-          handleSend={handleSend} 
-          message={message} 
-          setMessage={setMessage} 
-          toUser={toUser} 
+          handleSend={handleSend}
+          message={message}
+          setMessage={setMessage}
+          toUser={toUser}
           users={users}
-          handleFileUpload={handleFileUpload} // Pass handleFileUpload as prop
+          handleFileUpload={handleFileUpload}
         />
       </div>
     </div>
@@ -61,3 +112,5 @@ const ChatPage = () => {
 };
 
 export default ChatPage;
+
+// this code is remaing 

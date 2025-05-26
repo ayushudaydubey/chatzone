@@ -3,6 +3,8 @@ import { Paperclip, Send } from 'lucide-react';
 
 const ChatInput = ({ handleSend, message, setMessage, toUser, users, handleFileUpload }) => {
   const fileInputRef = useRef(null);
+  const formRef = useRef(null);
+  const inputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
@@ -14,11 +16,9 @@ const ChatInput = ({ handleSend, message, setMessage, toUser, users, handleFileU
     const file = e.target.files[0];
     if (!file) return;
 
-    // Reset states
     setUploadError('');
     setUploadProgress(0);
 
-    // Client-side validation
     if (file.size > 50 * 1024 * 1024) {
       setUploadError('File size must be less than 50MB');
       return;
@@ -30,29 +30,16 @@ const ChatInput = ({ handleSend, message, setMessage, toUser, users, handleFileU
     }
 
     setIsUploading(true);
-    
+
     try {
-      console.log('Starting file upload:', file.name);
-      
-      await handleFileUpload(file, (progress) => {
-        setUploadProgress(progress);
-      });
-      
-      console.log('File upload completed successfully');
+      await handleFileUpload(file, (progress) => setUploadProgress(progress));
       setUploadProgress(100);
-      
-      // Clear progress after a short delay
-      setTimeout(() => {
-        setUploadProgress(0);
-      }, 2000);
-      
+      setTimeout(() => setUploadProgress(0), 2000);
     } catch (error) {
-      console.error('File upload error:', error);
       setUploadError(error.message || 'Failed to upload file');
       setUploadProgress(0);
     } finally {
       setIsUploading(false);
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -60,48 +47,82 @@ const ChatInput = ({ handleSend, message, setMessage, toUser, users, handleFileU
   };
 
   const triggerFileInput = () => {
-    setUploadError(''); // Clear any previous errors
+    setUploadError('');
     fileInputRef.current?.click();
   };
 
+  // Fixed form submit handler to prevent screen jumping
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Store current scroll position
+    const chatContainer = document.querySelector('.overflow-y-auto');
+    const scrollTop = chatContainer ? chatContainer.scrollTop : 0;
+    
+    // Call original handleSend
+    handleSend(e);
+    
+    // Maintain focus on input to prevent screen jumping
+    if (inputRef.current) {
+      setTimeout(() => {
+        inputRef.current.focus();
+        // Restore scroll position if needed
+        if (chatContainer) {
+          chatContainer.scrollTop = scrollTop;
+        }
+      }, 0);
+    }
+  };
+
+  const getPlaceholderText = () => {
+    if (isUploading) return `Uploading... ${uploadProgress}%`;
+    if (!toUser) return 'Select a user to chat';
+    return window.innerWidth < 640
+      ? `Message ${toUser}`
+      : `Message ${toUser} ${isOnline ? '(online)' : '(offline)'}`;
+  };
+
   return (
-    <div className="p-4 border-t border-gray-200 bg-black absolute bottom-0 left-0 right-0">
-      {/* Upload Progress Bar */}
+    <div className="p-2 sm:p-3 md:p-4 border-t border-gray-700 bg-zinc-950 sticky bottom-0">
+      
       {isUploading && (
-        <div className="mb-3">
-          <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
-            <span>Uploading file...</span>
+        <div className="mb-2 sm:mb-3">
+          <div className="flex justify-between text-xs text-gray-400 mb-1">
+            <span>Uploading...</span>
             <span>{uploadProgress}%</span>
           </div>
           <div className="w-full bg-gray-700 rounded-full h-2">
-            <div 
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300 ease-out"
+            <div
+              className="bg-green-500 h-2 rounded-full transition-all duration-300"
               style={{ width: `${uploadProgress}%` }}
-            ></div>
+            />
           </div>
         </div>
       )}
 
-      {/* Upload Error */}
       {uploadError && (
-        <div className="mb-3 p-2 bg-red-900/20 border border-red-500/30 rounded-md">
-          <p className="text-red-400 text-xs">{uploadError}</p>
+        <div className="mb-2 sm:mb-3 p-2 bg-red-900/20 border border-red-500/30 rounded-md text-xs text-red-400">
+          {uploadError}
         </div>
       )}
 
-      <form onSubmit={handleSend} className="flex items-center gap-2">
-        {/* File Upload Button */}
+      <form 
+        ref={formRef}
+        onSubmit={handleFormSubmit} 
+        className="flex gap-1 sm:gap-2 items-center"
+      >
+        
         <button
           type="button"
           onClick={triggerFileInput}
           disabled={!toUser || isUploading}
-          className="p-2 text-gray-400 hover:text-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Upload image or video"
+          className="p-2 text-gray-400 hover:text-green-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg hover:bg-gray-800/50"
+          title="Upload"
         >
-          <Paperclip size={20} />
+          <Paperclip size={18} className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
-        
-        {/* Hidden File Input */}
+
         <input
           ref={fileInputRef}
           type="file"
@@ -110,44 +131,34 @@ const ChatInput = ({ handleSend, message, setMessage, toUser, users, handleFileU
           className="hidden"
         />
 
-        {/* Text Input */}
         <input
+          ref={inputRef}
           type="text"
-          className="flex-1 p-3 text-blue-100 border border-gray-300 rounded-md focus:outline-none bg-zinc-800 focus:border-blue-500 transition-colors"
-          placeholder={
-            isUploading
-              ? `Uploading... ${uploadProgress}%`
-              : toUser
-                ? `Message ${toUser} ${isOnline ? '(online)' : '(offline - will receive later)'}`
-                : 'Select a user to chat'
-          }
+          className="flex-1 p-2 sm:p-3 text-sm sm:text-base text-blue-100 border border-gray-600 rounded-md bg-zinc-800 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/20"
+          placeholder={getPlaceholderText()}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           disabled={!toUser || isUploading}
+          autoComplete="off"
         />
 
-        {/* Send Button */}
         <button
           type="submit"
           disabled={!toUser || (!message.trim() && !isUploading) || isUploading}
-          className="bg-green-700 text-blue-50 px-4 py-2 rounded-md hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-green-700 text-white px-3 py-2 sm:px-4 sm:py-3 rounded-md hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isUploading ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
           ) : (
-            <Send size={18} />
+            <Send size={16} className="w-4 h-4 sm:w-5 sm:h-5" />
           )}
         </button>
       </form>
 
-      {/* Upload Status */}
       {isUploading && (
-        <div className="mt-2 text-xs text-gray-400 flex items-center gap-2">
+        <div className="mt-2 text-xs text-gray-400 flex gap-2 sm:hidden">
           <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
-          <span>
-            Uploading file... 
-            {uploadProgress > 0 && ` ${uploadProgress}%`}
-          </span>
+          <span>Uploading... {uploadProgress}%</span>
         </div>
       )}
     </div>
