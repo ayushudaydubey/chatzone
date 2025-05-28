@@ -35,7 +35,7 @@ export async function sendFileController(req, res) {
     });
 
   } catch (error) {
-    console.log("Upload error:", error);
+  
     res.json({ success: false, error: "Upload failed" });
   }
 }

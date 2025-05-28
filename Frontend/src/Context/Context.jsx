@@ -51,10 +51,10 @@ const Context = (props) => {
             lastSeen: null
           }));
         setUsers(allUsersWithStatus);
-        console.log("All users loaded (excluding self):", allUsersWithStatus);
+       
       }
     } catch (error) {
-      console.error("Error loading all users:", error);
+    
     }
   };
 
@@ -81,7 +81,7 @@ const Context = (props) => {
   useEffect(() => {
     // Listen for private messages
     socket.on("private-message", (messageData) => {
-      console.log("Received private message:", messageData);
+
       
       setMessages(prev => {
         // Check if message already exists to avoid duplicates
@@ -127,7 +127,7 @@ const Context = (props) => {
 
     // Listen for user list updates with online status
     socket.on("update-users", (usersWithStatus) => {
-      console.log("Updated user list with status:", usersWithStatus);
+
       
       if (Array.isArray(usersWithStatus)) {
         const filteredUsers = usersWithStatus
@@ -151,14 +151,14 @@ const Context = (props) => {
             }
           });
         
-        console.log("Filtered online users (excluding self):", filteredUsers);
+       
         setUsers(filteredUsers);
       }
     });
 
     // Listen for user disconnect
     socket.on("user-disconnected", (disconnectedUser) => {
-      console.log("User disconnected:", disconnectedUser);
+   
       setUsers(prev => prev.map(user => {
         const userName = typeof user === 'object' ? user.username : user;
         if (userName === disconnectedUser) {
@@ -172,7 +172,7 @@ const Context = (props) => {
 
     // Listen for user reconnect
     socket.on("user-connected", (connectedUser) => {
-      console.log("User connected:", connectedUser);
+
       setUsers(prev => {
         const existingUserIndex = prev.findIndex(user => {
           const userName = typeof user === 'object' ? user.username : user;
@@ -219,6 +219,17 @@ const Context = (props) => {
     }
   }, [username, toUser]);
 
+  
+  useEffect(() => {
+    const savedName = localStorage.getItem("username");
+    const savedToken = localStorage.getItem("token");
+
+    if (savedName && savedToken) {
+      setUsername(savedName);
+      setIsRegistered(true);
+    }
+  }, []);
+
   // Function to load chat history from server
   const loadChatHistory = async () => {
     try {
@@ -227,7 +238,7 @@ const Context = (props) => {
         setMessages(response.data);
       }
     } catch (error) {
-      console.error("Error loading chat history:", error);
+
     }
   };
 
@@ -260,11 +271,7 @@ const Context = (props) => {
     formData.append('receiverId', toUser);
 
     try {
-      console.log('Starting file upload...', {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type
-      });
+    
 
       const response = await fileUploadInstance.post('/user/upload-file', formData, {
         headers: {
@@ -274,21 +281,21 @@ const Context = (props) => {
           if (onProgress && progressEvent.total) {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             onProgress(percentCompleted);
-            console.log(`Upload progress: ${percentCompleted}%`);
+        
           }
         },
-        // Override timeout for this specific request if needed
+
         timeout: 300000, // 5 minutes for very large files
       });
 
       if (response.data.success) {
-        console.log('File uploaded successfully:', response.data.fileUrl);
+     
         return response.data;
       } else {
         throw new Error('Upload failed: ' + (response.data.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('File upload error:', error);
+     
       
       // Provide more specific error messages
       if (error.code === 'ECONNABORTED') {
@@ -359,9 +366,9 @@ const Context = (props) => {
     try {
       socket.emit("private-message", messageData);
       setMessage("");
-      console.log("Message sent:", messageData);
+     
     } catch (error) {
-      console.error("Send message error:", error);
+    
       alert("Failed to send message");
     }
   };

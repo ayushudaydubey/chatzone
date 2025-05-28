@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../utils/axios';
 import moonGirl from '../assets/login.avif';
+import { toast } from 'react-toastify';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -24,12 +25,12 @@ const Register = () => {
     e.preventDefault();
 
     if (!formData.name || !formData.email || !formData.password) {
-      alert("Please fill all required fields");
+     toast.warning("Please fill all required fields");
       return;
     }
 
     if (formData.password.length < 6) {
-      alert("Password must be at least 6 characters");
+      toast.warning("Password must be at least 6 characters");
       return;
     }
 
@@ -37,7 +38,7 @@ const Register = () => {
 
     try {
       await axiosInstance.post("/user/register", formData);
-      alert("Registration successful!");
+      toast.success("Registration successful!");
 
       setFormData({
         name: '',
@@ -49,7 +50,7 @@ const Register = () => {
       navigate("/login");
     } catch (error) {
       console.error("Registration failed:", error);
-      alert(error.response?.data?.message || "Registration failed. Please try again.");
+      toast.error(error.response?.data?.message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }

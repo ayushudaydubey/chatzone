@@ -3,6 +3,7 @@ import { chatContext } from '../Context/Context';
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../utils/axios';
 import loginGirl from '../assets/boyregi.jpg';
+import { toast } from 'react-toastify';
 
 const Login = () => {
   const { setUsername, setIsRegistered } = useContext(chatContext);
@@ -15,7 +16,7 @@ const Login = () => {
     e.preventDefault();
 
     if (!email.trim() || !password.trim()) {
-      alert("Please enter both email and password");
+      toast.warning("Please enter both email and password");
       return;
     }
 
@@ -36,13 +37,13 @@ const Login = () => {
     } catch (error) {
       console.error("Login error:", error);
       if (error.response?.status === 403) {
-        alert(error.response.data.message);
+        toast.error(error.response.data.message);
       } else if (error.response?.status === 401) {
-        alert("Invalid credentials");
+        toast.error("Invalid credentials");
       } else if (error.response?.status === 404) {
-        alert("User not found");
+        toast.error("User not found");
       } else {
-        alert(error.response?.data?.message || "Login failed");
+        toast.error(error.response?.data?.message || "Login failed");
       }
     } finally {
       setLoading(false);

@@ -134,7 +134,7 @@ const ChatInput = ({ handleSend, message, setMessage, toUser, users, handleFileU
         <input
           ref={inputRef}
           type="text"
-          className="flex-1 p-2 sm:p-3 text-sm sm:text-base text-blue-100 border border-gray-600 rounded-md bg-zinc-800 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/20"
+          className="flex-1 p-2 sm:p-3 text-sm sm:text-base text-blue-100 border border-gray-600 rounded-md bg-zinc-800 focus:outline-none"
           placeholder={getPlaceholderText()}
           value={message}
           onChange={(e) => setMessage(e.target.value)}

@@ -3,9 +3,8 @@
 import userModel from "../Models/users.models.js";
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import cookieParser from "cookie-parser";
 
-// Register Controller
+// Register Controller - Now automatically logs in user after registration
 export async function registerUserController(req, res) {
   try {
     const { name, email, password, mobileNo } = req.body;
@@ -26,34 +25,36 @@ export async function registerUserController(req, res) {
       email,
       mobileNo,
       password: hashedPassword,
-      isOnline: false
+      isOnline: true // Set online when registering
     });
 
-    // const token = jwt.sign(
-    //   { id: user._id, email: user.email },
-    //   process.env.SEC_KEY || "default_secret", // Fallback if SEC_KEY is undefined
-    //   { expiresIn: '24h' }
-    // );
+    // Create JWT token after registration
+    const token = jwt.sign(
+      { id: user._id, email: user.email, name: user.name },
+      process.env.SEC_KEY || "default_secret",
+      { expiresIn: '7d' } // Extended to 7 days for better UX
+    );
 
-    // res.cookie("token", token, {
-    //   httpOnly: true,
-    //   secure: process.env.NODE_ENV === 'production',
-    //   sameSite: 'lax',
-    //   maxAge: 24 * 60 * 60 * 1000,
-    //   path: '/'
-    // });
+    // Set token in cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/'
+    });
 
-    console.log("User registered:", user.name);
+    console.log("User registered and logged in:", user.name);
 
     res.status(201).json({
-      message: "User registration successful",
+      message: "User registration and login successful",
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
         mobileNo: user.mobileNo
       },
-      // token
+      token
     });
 
   } catch (err) {
@@ -84,11 +85,14 @@ export async function loginUserController(req, res) {
       return res.status(401).json({ error: "Invalid credentials." });
     }
 
+    // Update user online status
+    await userModel.findByIdAndUpdate(user._id, { isOnline: true });
+
     // Create JWT token
     const token = jwt.sign(
-      { id: user._id, email: user.email },
+      { id: user._id, email: user.email, name: user.name },
       process.env.SEC_KEY || "default_secret",
-      { expiresIn: "1d" }
+      { expiresIn: "7d" } // Extended to 7 days
     );
 
     // Set token in cookie
@@ -96,7 +100,7 @@ export async function loginUserController(req, res) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 24 * 60 * 60 * 1000, // 1 day
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
     // Send response
@@ -116,32 +120,35 @@ export async function loginUserController(req, res) {
 }
 
 // Logout Controller
-export async function logoutUserController(req, res) {
+// Example implementation for logoutUserController
+export const logoutUserController = async (req, res) => {
   try {
-    const token = req.cookies.token;
-    if (!token) {
-      return res.status(400).json({ error: "No token found" });
-    }
-
-    const decoded = jwt.verify(token, process.env.SEC_KEY || "default_secret");
-    await userModel.findByIdAndUpdate(decoded.id, { isOnline: false });
-
-    res.clearCookie("token", {
+    // Clear the HTTP-only cookie containing the JWT token
+    res.clearCookie('token', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/'
+      secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+      sameSite: 'strict',
+      path: '/' // Make sure path matches the one used when setting the cookie
     });
+
+    // If you're using a token blacklist or database session tracking,
+    // you might want to invalidate the token here
+    // Example:
+    // await TokenBlacklist.create({ token: req.token, userId: req.user.id });
 
     res.status(200).json({
-      message: "Logout successful"
+      success: true,
+      message: "Logged out successfully"
     });
-  } catch (err) {
-    console.error("Logout error:", err.message);
-    res.status(500).json({ error: "Internal server error during logout" });
+
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Logout failed"
+    });
   }
 }
-
 // Middleware to Verify JWT Token from Cookie
 export async function verifyTokenMiddleware(req, res, next) {
   try {
@@ -152,12 +159,40 @@ export async function verifyTokenMiddleware(req, res, next) {
     }
 
     const decoded = jwt.verify(token, process.env.SEC_KEY || "default_secret");
-    req.user = decoded;
+    
+    // Check if user still exists in database
+    const user = await userModel.findById(decoded.id);
+    if (!user) {
+      return res.status(401).json({ error: "User not found" });
+    }
+
+    // Add user info to request object
+    req.user = {
+      id: decoded.id,
+      email: decoded.email,
+      name: decoded.name || user.name // Ensure name is available
+    };
+    
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ error: "Token expired" });
     }
-    return res.status(401).json({ error: "Invalid token" });
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    return res.status(401).json({ error: "Token verification failed" });
+  }
+}
+
+// Get all users (for chat user list)
+export async function getAllUsersController(req, res) {
+  try {
+    const users = await userModel.find({}, 'name email isOnline').lean();
+    const usernames = users.map(user => user.name);
+    res.status(200).json(usernames);
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ error: "Failed to fetch users" });
   }
 }

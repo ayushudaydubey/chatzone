@@ -13,7 +13,9 @@ const ChatPage = () => {
     users, setToUser, toUser, username,
     message, setMessage, handleSend, messages,
     setUsername, senderId, setSenderId, receiverId, setReceiverId,
-    socket, messagesEndRef, handleFileUpload
+    socket, messagesEndRef, handleFileUpload, isRegistered,
+    // Add the unread message functions from context
+    getUnreadCount, getLastMessage, getTotalUnreadCount
   } = useContext(chatContext);
 
   useEffect(() => {
@@ -58,16 +60,22 @@ const ChatPage = () => {
   };
 
   return (
-    <div className="w-full h-screen  shadow-lg lg:rounded-xl lg:grid lg:grid-cols-4 overflow-hidden">
+    <div className="w-full h-screen shadow-lg lg:rounded-xl lg:grid lg:grid-cols-4 overflow-hidden">
       {/* User List - Hidden on mobile by default, shown as overlay when toggled */}
       <div className="hidden lg:block">
         <UserList 
           users={users} 
           toUser={toUser} 
-          setToUser={setToUser} 
+          setToUser={setToUser}
+          username={username}
           formatTime={formatTime}
+          isRegistered={isRegistered}
           isOpen={isUserListOpen}
           onClose={handleCloseUserList}
+          // Pass the unread message functions
+          getUnreadCount={getUnreadCount}
+          getLastMessage={getLastMessage}
+          getTotalUnreadCount={getTotalUnreadCount}
         />
       </div>
 
@@ -76,10 +84,16 @@ const ChatPage = () => {
         <UserList 
           users={users} 
           toUser={toUser} 
-          setToUser={setToUser} 
+          setToUser={setToUser}
+          username={username}
           formatTime={formatTime}
+          isRegistered={isRegistered}
           isOpen={isUserListOpen}
           onClose={handleCloseUserList}
+          // Pass the unread message functions
+          getUnreadCount={getUnreadCount}
+          getLastMessage={getLastMessage}
+          getTotalUnreadCount={getTotalUnreadCount}
         />
       </div>
 
@@ -112,5 +126,3 @@ const ChatPage = () => {
 };
 
 export default ChatPage;
-
-// this code is remaing 
