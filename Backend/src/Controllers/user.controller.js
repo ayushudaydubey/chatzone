@@ -119,28 +119,40 @@ export async function loginUserController(req, res) {
   }
 }
 
+// Example using Express.js
+export const getMeController =  async(req, res) => {
+  // Sample logic: verify session or JWT
+  if (req.user) {
+    res.status(200).json({ name: req.user.name });
+  } else {
+    res.status(401).json({ message: 'Unauthorized' });
+  }
+}
+
+
 // Logout Controller
-// Example implementation for logoutUserController
 export const logoutUserController = async (req, res) => {
   try {
+    // If user is authenticated, update their online status
+    if (req.user?.id) {
+      await userModel.findByIdAndUpdate(req.user.id, { 
+        isOnline: false,
+        lastSeen: new Date()
+      });
+    }
+
     // Clear the HTTP-only cookie containing the JWT token
     res.clearCookie('token', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
-      sameSite: 'strict',
-      path: '/' // Make sure path matches the one used when setting the cookie
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/'
     });
-
-    // If you're using a token blacklist or database session tracking,
-    // you might want to invalidate the token here
-    // Example:
-    // await TokenBlacklist.create({ token: req.token, userId: req.user.id });
 
     res.status(200).json({
       success: true,
       message: "Logged out successfully"
     });
-
   } catch (error) {
     console.error("Logout error:", error);
     res.status(500).json({
@@ -148,7 +160,8 @@ export const logoutUserController = async (req, res) => {
       error: "Logout failed"
     });
   }
-}
+};
+
 // Middleware to Verify JWT Token from Cookie
 export async function verifyTokenMiddleware(req, res, next) {
   try {
@@ -185,10 +198,35 @@ export async function verifyTokenMiddleware(req, res, next) {
   }
 }
 
+// Get current user info (for the /me endpoint)
+export async function getCurrentUserController(req, res) {
+  try {
+    const user = await userModel.findById(req.user.id)
+      .select('-password') // Exclude password from response
+      .lean();
+    
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.status(200).json({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      mobileNo: user.mobileNo,
+      isOnline: user.isOnline,
+      lastSeen: user.lastSeen
+    });
+  } catch (error) {
+    console.error("Error fetching current user:", error);
+    res.status(500).json({ error: "Failed to fetch user data" });
+  }
+}
+
 // Get all users (for chat user list)
 export async function getAllUsersController(req, res) {
   try {
-    const users = await userModel.find({}, 'name email isOnline').lean();
+    const users = await userModel.find({}, 'name email isOnline lastSeen').lean();
     const usernames = users.map(user => user.name);
     res.status(200).json(usernames);
   } catch (error) {

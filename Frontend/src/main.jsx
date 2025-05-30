@@ -6,7 +6,7 @@ import './index.css';
 import Context from './Context/Context';
 import {ToastContainer} from  'react-toastify'
 createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
+  // <React.StrictMode>
     <BrowserRouter>
     
       <Context>
@@ -14,5 +14,5 @@ createRoot(document.getElementById('root')).render(
         <ToastContainer/>
       </Context>
     </BrowserRouter>
-  </React.StrictMode>
+  // </React.StrictMode>
 );

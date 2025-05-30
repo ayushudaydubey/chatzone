@@ -3,90 +3,107 @@ import axios from 'axios';
 // Create axios instance
 const axiosInstance = axios.create({
   baseURL: 'http://localhost:3000',
-  withCredentials: true,
-  timeout: 10000, // 10 seconds for regular requests
+  withCredentials: true, // This is crucial for cookie-based auth
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   }
 });
 
-// Create a separate instance for file uploads with longer timeout
+// Create a separate instance for file uploads
 const fileUploadInstance = axios.create({
   baseURL: 'http://localhost:3000',
-  withCredentials: true,
-  timeout: 120000, // 2 minutes for file uploads
+  withCredentials: true, // Important for file uploads too
+  timeout: 120000,
   headers: {
     'Content-Type': 'multipart/form-data',
   }
 });
 
-// Log all requests for debugging
+// Request interceptor
 axiosInstance.interceptors.request.use(
   (config) => {
-    console.log(`Making ${config.method.toUpperCase()} request to:`, config.baseURL + config.url);
-    console.log('Request data:', config.data);
+  
     return config;
   },
   (error) => {
-    console.error('Request error:', error);
+    // console.error('Request error:', error);
     return Promise.reject(error);
   }
 );
 
-// Log all responses for debugging
+// Response interceptor with cookie-based auth handling
 axiosInstance.interceptors.response.use(
   (response) => {
-    console.log(`Response from ${response.config.url}:`, response.status, response.data);
+    // console.log(`Response from ${response.config.url}:`, response.status, response.data);
     return response;
   },
   (error) => {
-    console.error('Response error:', error);
+    // console.error('Response error:', error);
     
     if (error.code === 'ECONNREFUSED') {
-      console.error('Cannot connect to server. Make sure your backend is running on http://localhost:3000');
+      // console.error('Cannot connect to server. Make sure your backend is running on http://localhost:3000');
     }
     
     if (error.code === 'ECONNABORTED') {
-      console.error('Request timeout. The server took too long to respond.');
+      // console.error('Request timeout. The server took too long to respond.');
+    }
+    
+    // Handle authentication errors
+    if (error.response && error.response.status === 401) {
+      // console.log('Authentication failed - redirecting to login');
+      
+      // Only redirect if not already on login/register pages
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/') {
+        window.location.href = '/login';
+      }
     }
     
     if (error.response) {
-      console.error('Error status:', error.response.status);
-      console.error('Error data:', error.response.data);
+      // console.error('Error status:', error.response.status);
+      // console.error('Error data:', error.response.data);
     }
     
     return Promise.reject(error);
   }
 );
 
-// Add interceptors for file upload instance too
+// File upload interceptors
 fileUploadInstance.interceptors.request.use(
   (config) => {
-    console.log(`Making file upload request to:`, config.baseURL + config.url);
+    // console.log(`Making file upload request to:`, config.baseURL + config.url);
     return config;
   },
   (error) => {
-    console.error('File upload request error:', error);
+    // console.error('File upload request error:', error);
     return Promise.reject(error);
   }
 );
 
 fileUploadInstance.interceptors.response.use(
   (response) => {
-    console.log(`File upload response:`, response.status);
+    // console.log(`File upload response:`, response.status);
     return response;
   },
   (error) => {
-    console.error('File upload response error:', error);
+    // console.error('File upload response error:', error);
     
     if (error.code === 'ECONNABORTED') {
-      console.error('File upload timeout. The file upload took too long.');
+      // console.error('File upload timeout. The file upload took too long.');
+    }
+    
+    // Handle auth errors for file uploads too
+    if (error.response && error.response.status === 401) {
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/') {
+        window.location.href = '/login';
+      }
     }
     
     return Promise.reject(error);
   }
 );
 
-// Export both instances
 export default axiosInstance;
 export { fileUploadInstance };

@@ -8,13 +8,14 @@ const socket = io("http://localhost:3000");
 
 const Context = (props) => {
   const [username, setUsername] = useState("");
-  const [isRegistered, setIsRegistered] = useState(false)
+  const [isRegistered, setIsRegistered] = useState(false);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [senderId, setSenderId] = useState("");
   const [receiverId, setReceiverId] = useState("");
   const [users, setUsers] = useState([]);
   const [toUser, setToUser] = useState("");
+  const [isLoading, setIsLoading] = useState('');
   
   // New state for tracking unread messages
   const [unreadMessages, setUnreadMessages] = useState({}); // { username: count }
@@ -27,15 +28,28 @@ const Context = (props) => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Initialize username from localStorage and load all users
   useEffect(() => {
-    const savedUsername = localStorage.getItem("username");
-    if (savedUsername) {
-      setUsername(savedUsername);
-      socket.emit("register-user", savedUsername);
-    }
-    
-    loadAllUsers();
+    // Fetch current user from backend using cookie
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await axiosInstance.get("/user/auth/me");
+        if (response.data && response.data.name) {
+          setUsername(response.data.name);
+          setIsRegistered(true);
+          socket.emit("register-user", response.data.name);
+          await loadAllUsers();
+        } else {
+          setUsername("");
+          setIsRegistered(false);
+        }
+      } catch (error) {
+        console.error("Error fetching current user:", error);
+        setUsername("");
+        setIsRegistered(false);
+      }
+    };
+
+    fetchCurrentUser();
   }, []);
 
   // Function to load all registered users
@@ -44,17 +58,16 @@ const Context = (props) => {
       const response = await axiosInstance.get('/user/all-users');
       if (response.data) {
         const allUsersWithStatus = response.data
-          .filter(userName => userName !== username && userName.trim() !== '') // fillter and empty current username
+          .filter(userName => userName !== username && userName.trim() !== '') // filter out current username and empty strings
           .map(userName => ({
             username: userName,
             isOnline: false,
             lastSeen: null
           }));
         setUsers(allUsersWithStatus);
-       
       }
     } catch (error) {
-    
+      console.error("Error loading users:", error);
     }
   };
 
@@ -77,29 +90,42 @@ const Context = (props) => {
     return lastMessages[fromUser] || null;
   };
 
+  // Helper function to get online users only
+  const getOnlineUsers = () => {
+    return users.filter(user => {
+      const userObj = typeof user === 'object' ? user : { username: user, isOnline: true };
+      return userObj.isOnline;
+    });
+  };
+
+  // Helper function to get total unread messages count
+  const getTotalUnreadCount = () => {
+    return Object.values(unreadMessages).reduce((total, count) => total + count, 0);
+  };
+
   // Socket event listeners
   useEffect(() => {
     // Listen for private messages
     socket.on("private-message", (messageData) => {
-
-      
       setMessages(prev => {
         // Check if message already exists to avoid duplicates
-        const exists = prev.some(msg => 
-          msg.fromUser === messageData.fromUser && 
-          msg.toUser === messageData.toUser && 
+        const exists = prev.some(msg =>
+          msg.fromUser === messageData.fromUser &&
+          msg.toUser === messageData.toUser &&
           msg.message === messageData.message &&
           Math.abs(new Date(msg.timestamp) - new Date(messageData.timestamp)) < 1000
         );
-        
+
         if (!exists) {
           return [...prev, messageData];
         }
         return prev;
       });
 
-      // Update unread messages count and last message if not currently chatting with sender
-      if (messageData.fromUser !== toUser && messageData.fromUser !== username) {
+      // FIXED: Update unread messages count and last message 
+      // Only track as unread if the message is FROM someone else TO you
+      // AND you're not currently chatting with that person
+      if (messageData.fromUser !== username && messageData.toUser === username && messageData.fromUser !== toUser) {
         setUnreadMessages(prev => ({
           ...prev,
           [messageData.fromUser]: (prev[messageData.fromUser] || 0) + 1
@@ -111,29 +137,52 @@ const Context = (props) => {
           [messageData.fromUser]: {
             message: messageData.message,
             timestamp: messageData.timestamp,
-            isFile: messageData.isFile || false
+            isFile: messageData.isFile || messageData.messageType === 'file'
           }
         }));
 
         // Show browser notification if supported
         if (Notification.permission === 'granted') {
           new Notification(`New message from ${messageData.fromUser}`, {
-            body: messageData.isFile ? '📎 Sent a file' : messageData.message,
-            icon: '/favicon.ico' // Add your app icon path
+            body: messageData.isFile || messageData.messageType === 'file' ? '📎 Sent a file' : messageData.message,
+            icon: '/favicon.ico'
           });
         }
+      }
+
+      // FIXED: Also update last message even if currently chatting (for UI consistency)
+      // but don't increment unread count
+      if (messageData.fromUser !== username && messageData.toUser === username) {
+        setLastMessages(prev => ({
+          ...prev,
+          [messageData.fromUser]: {
+            message: messageData.message,
+            timestamp: messageData.timestamp,
+            isFile: messageData.isFile || messageData.messageType === 'file'
+          }
+        }));
+      }
+
+      // FIXED: Update last message for outgoing messages too (when you send to someone)
+      if (messageData.fromUser === username && messageData.toUser !== username) {
+        setLastMessages(prev => ({
+          ...prev,
+          [messageData.toUser]: {
+            message: messageData.message,
+            timestamp: messageData.timestamp,
+            isFile: messageData.isFile || messageData.messageType === 'file'
+          }
+        }));
       }
     });
 
     // Listen for user list updates with online status
     socket.on("update-users", (usersWithStatus) => {
-
-      
       if (Array.isArray(usersWithStatus)) {
         const filteredUsers = usersWithStatus
           .filter(user => {
             const userName = typeof user === 'object' ? user.username : user;
-            // valid username and filter 
+            // valid username and filter current user
             return userName !== username && userName && userName.trim() !== '';
           })
           .map(user => {
@@ -145,25 +194,23 @@ const Context = (props) => {
             } else {
               return {
                 username: user,
-                isOnline: true, // users come onlie from socket
+                isOnline: true, // users come online from socket
                 lastSeen: new Date()
               };
             }
           });
-        
-       
+
         setUsers(filteredUsers);
       }
     });
 
     // Listen for user disconnect
     socket.on("user-disconnected", (disconnectedUser) => {
-   
       setUsers(prev => prev.map(user => {
         const userName = typeof user === 'object' ? user.username : user;
         if (userName === disconnectedUser) {
-          return typeof user === 'object' ? 
-            { ...user, isOnline: false, lastSeen: new Date() } : 
+          return typeof user === 'object' ?
+            { ...user, isOnline: false, lastSeen: new Date() } :
             { username: user, isOnline: false, lastSeen: new Date() };
         }
         return user;
@@ -172,7 +219,6 @@ const Context = (props) => {
 
     // Listen for user reconnect
     socket.on("user-connected", (connectedUser) => {
-
       setUsers(prev => {
         const existingUserIndex = prev.findIndex(user => {
           const userName = typeof user === 'object' ? user.username : user;
@@ -182,7 +228,7 @@ const Context = (props) => {
         if (existingUserIndex !== -1) {
           // Update existing user
           const updatedUsers = [...prev];
-          updatedUsers[existingUserIndex] = typeof prev[existingUserIndex] === 'object' ? 
+          updatedUsers[existingUserIndex] = typeof prev[existingUserIndex] === 'object' ?
             { ...prev[existingUserIndex], isOnline: true, lastSeen: new Date() } :
             { username: prev[existingUserIndex], isOnline: true, lastSeen: new Date() };
           return updatedUsers;
@@ -205,12 +251,15 @@ const Context = (props) => {
     };
   }, [username, toUser]);
 
-  // Mark messages as read when switching to a user
+  // FIXED: Mark messages as read when switching to a user AND when messages are loaded
   useEffect(() => {
     if (toUser) {
-      markMessagesAsRead(toUser);
+      // Small delay to ensure messages are loaded first
+      setTimeout(() => {
+        markMessagesAsRead(toUser);
+      }, 100);
     }
-  }, [toUser]);
+  }, [toUser, messages]); // Added messages dependency
 
   // Load chat history when toUser changes
   useEffect(() => {
@@ -218,17 +267,6 @@ const Context = (props) => {
       loadChatHistory();
     }
   }, [username, toUser]);
-
-  
-  useEffect(() => {
-    const savedName = localStorage.getItem("username");
-    const savedToken = localStorage.getItem("token");
-
-    if (savedName && savedToken) {
-      setUsername(savedName);
-      setIsRegistered(true);
-    }
-  }, []);
 
   // Function to load chat history from server
   const loadChatHistory = async () => {
@@ -238,7 +276,7 @@ const Context = (props) => {
         setMessages(response.data);
       }
     } catch (error) {
-
+      console.error("Error loading chat history:", error);
     }
   };
 
@@ -271,8 +309,6 @@ const Context = (props) => {
     formData.append('receiverId', toUser);
 
     try {
-    
-
       const response = await fileUploadInstance.post('/user/upload-file', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -281,22 +317,17 @@ const Context = (props) => {
           if (onProgress && progressEvent.total) {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             onProgress(percentCompleted);
-        
           }
         },
-
         timeout: 300000, // 5 minutes for very large files
       });
 
       if (response.data.success) {
-     
         return response.data;
       } else {
         throw new Error('Upload failed: ' + (response.data.error || 'Unknown error'));
       }
     } catch (error) {
-     
-      
       // Provide more specific error messages
       if (error.code === 'ECONNABORTED') {
         throw new Error('Upload timeout: The file upload took too long. Please try with a smaller file.');
@@ -311,44 +342,61 @@ const Context = (props) => {
   };
 
   const register = async (userData) => {
+    setIsLoading(true);
     try {
-      const response = await axiosInstance.post("/user/register", userData);
-      if (response.status === 200 || response.status === 201) {
-        await loadAllUsers();
-        return { success: true };
+      const response = await axiosInstance.post('/user/register', userData);
+      
+      if (response.status === 201 && response.data.user) {
+        // Token is automatically set in cookie by backend
+        setUsername(response.data.user.name);
+        setIsRegistered(true);
+        
+        return { 
+          success: true, 
+          user: response.data.user 
+        };
+      } else {
+        return { 
+          success: false, 
+          error: response.data.error || 'Registration failed' 
+        };
       }
-      return { success: false, error: "Registration failed" };
     } catch (error) {
-      let errorMessage = "Registration failed";
-      if (error.response?.data) {
-        errorMessage = error.response.data.message || error.response.data.error || errorMessage;
-      }
-      return { success: false, error: errorMessage };
+      console.error('Registration error:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.error || 'Registration failed' 
+      };
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const login = async (userData) => {
+  const login = async (credentials) => {
     try {
-      const response = await axiosInstance.post("/user/login", userData);
+      const response = await axiosInstance.post('/user/login', credentials);
+      
       if (response.status === 200 && response.data.user) {
-        const userName = response.data.user.name;
-        setUsername(userName);
-        localStorage.setItem("username", userName);
-        
-        socket.emit("register-user", userName);
+        // Token is automatically set in cookie by backend
+        setUsername(response.data.user.name);
         setIsRegistered(true);
         
-        await loadAllUsers();
-        
-        return { success: true };
+        return { 
+          success: true, 
+          user: response.data.user 
+        };
+      } else {
+        return { 
+          success: false, 
+          error: response.data.error || 'Login failed' 
+        };
       }
-      return { success: false, error: "Login failed" };
     } catch (error) {
-      let errorMessage = "Login failed";
-      if (error.response?.data) {
-        errorMessage = error.response.data.message || error.response.data.error || errorMessage;
-      }
-      return { success: false, error: errorMessage };
+      console.error('Login error:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.error || 'Login failed' 
+      };
     }
   };
 
@@ -366,48 +414,57 @@ const Context = (props) => {
     try {
       socket.emit("private-message", messageData);
       setMessage("");
-     
     } catch (error) {
-    
+      console.error("Error sending message:", error);
       alert("Failed to send message");
     }
   };
 
-  const logout = () => {
-    socket.disconnect();
-    
-    setUsername("");
-    setMessages([]);
-    setUsers([]);
-    setToUser("");
-    setIsRegistered(false);
-    setUnreadMessages({});
-    setLastMessages({});
-    
-    localStorage.removeItem("username");
-    
-    socket.connect();
+  const logout = async () => {
+    setIsLoading(true);
+    try {
+      // Call backend logout to clear cookie
+      await axiosInstance.post('/user/logout');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      // Clear local state regardless of API call success
+      setUsername('');
+      setIsRegistered(false);
+      setIsLoading(false);
+    }
   };
-
-  // Helper function to get online users only
-  const getOnlineUsers = () => {
-    return users.filter(user => {
-      const userObj = typeof user === 'object' ? user : { username: user, isOnline: true };
-      return userObj.isOnline;
-    });
-  };
-
-  // Helper function to get total unread messages count
-  const getTotalUnreadCount = () => {
-    return Object.values(unreadMessages).reduce((total, count) => total + count, 0);
+  
+  const validateSession = async () => {
+    try {
+      const response = await axiosInstance.get('/user/me');
+      
+      if (response.status === 200 && response.data) {
+        setUsername(response.data.name);
+        setIsRegistered(true);
+        return { success: true, user: response.data };
+      } else {
+        setUsername('');
+        setIsRegistered(false);
+        return { success: false, error: 'Session invalid' };
+      }
+    } catch (error) {
+      console.error('Session validation failed:', error);
+      setUsername('');
+      setIsRegistered(false);
+      return { 
+        success: false, 
+        error: error.response?.data?.error || 'Session expired' 
+      };
+    }
   };
 
   const contextValue = {
     username,
     setUsername,
-
     isRegistered,
     setIsRegistered,
+    validateSession,
     senderId,
     setSenderId,
     receiverId,
@@ -422,15 +479,14 @@ const Context = (props) => {
     register,
     login,
     handleSend,
-    handleFileUpload, // Updated function with progress tracking
+    handleFileUpload,
     logout,
     socket,
     messagesEndRef,
     loadChatHistory,
     loadAllUsers,
-    getOnlineUsers, // Helper function for getting online users
-    
-    // New message indicator functions
+    getOnlineUsers,
+    // Message indicator functions
     unreadMessages,
     lastMessages,
     markMessagesAsRead,

@@ -1,12 +1,11 @@
 import React, { useState, useContext } from 'react';
 import { chatContext } from '../Context/Context';
 import { useNavigate } from 'react-router-dom';
-import axiosInstance from '../utils/axios';
 import loginGirl from '../assets/boyregi.jpg';
 import { toast } from 'react-toastify';
 
 const Login = () => {
-  const { setUsername, setIsRegistered } = useContext(chatContext);
+  const { login , } = useContext(chatContext);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,28 +22,17 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const res = await axiosInstance.post("/user/login", {
-        email,
-        password,
-      });
-
-      if (res.status === 200) {
-        setUsername(res.data.user.name);
-        setIsRegistered(true);
-        localStorage.setItem("username", res.data.user.name);
+      const result = await login({ email, password });
+            
+      if (result.success) {
+        toast.success("Login successful!");
         navigate("/chat");
+      } else {
+        toast.error(result.error || "Login failed");
       }
     } catch (error) {
       console.error("Login error:", error);
-      if (error.response?.status === 403) {
-        toast.error(error.response.data.message);
-      } else if (error.response?.status === 401) {
-        toast.error("Invalid credentials");
-      } else if (error.response?.status === 404) {
-        toast.error("User not found");
-      } else {
-        toast.error(error.response?.data?.message || "Login failed");
-      }
+      toast.error("An unexpected error occurred");
     } finally {
       setLoading(false);
     }
@@ -52,7 +40,7 @@ const Login = () => {
 
   return (
     <div className="flex flex-col md:flex-row items-center justify-center w-full min-h-screen bg-stone-950">
-      {/* Image Section - hidden on small screens */}
+      {/* Image Section */}
       <div className="w-full md:w-1/2 h-full md:h-screen">
         <img
           src={loginGirl}

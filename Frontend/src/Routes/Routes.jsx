@@ -15,6 +15,7 @@ const Routes = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/login" element={<Login />} />
       <Route path="/chat" element={<Private> <ChatPage /> </Private> } />
+         
 
     </AppRoutes>
   );

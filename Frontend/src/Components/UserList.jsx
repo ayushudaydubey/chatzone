@@ -1,5 +1,8 @@
 import React from 'react';
-import { X, MessageCircle } from 'lucide-react';
+import { X, MessageCircle  } from 'lucide-react';
+import { useContext } from 'react';
+import { chatContext } from '../Context/Context';
+
 
 const UserList = ({
   users,
@@ -12,13 +15,19 @@ const UserList = ({
   onClose,
   getUnreadCount,
   getLastMessage,
-  getTotalUnreadCount,logout
+  getTotalUnreadCount,
+
+
 }) => {
- 
+const { logout, isLoading , } = useContext(chatContext);
+
+
+
+
   const allUsers = users || [];
   const totalUnread = getTotalUnreadCount ? getTotalUnreadCount() : 0;
- 
-  
+
+
 
   // Helper function to truncate message text
   const truncateMessage = (message, maxLength = 30) => {
@@ -27,7 +36,7 @@ const UserList = ({
     return message.substring(0, maxLength) + '...';
   };
 
-  
+
 
   // Helper function to format timestamp for last message
   const formatLastMessageTime = (timestamp) => {
@@ -124,8 +133,8 @@ const UserList = ({
                       </div>
                       {/* Online/Offline Status Indicator */}
                       <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-zinc-900 ${isOnline
-                          ? 'bg-green-500 shadow-green-500/50 shadow-sm'
-                          : 'bg-gray-500 shadow-gray-500/50 shadow-sm'
+                        ? 'bg-green-500 shadow-green-500/50 shadow-sm'
+                        : 'bg-gray-500 shadow-gray-500/50 shadow-sm'
                         }`} />
                     </div>
 
@@ -219,9 +228,15 @@ const UserList = ({
               </p>
               <p className="text-green-400 text-xs font-medium">Online</p>
             </div>
-            <button onClick={logout} className=' px-3 py-1 text-red-500 text-sm tracking-wide font-thin border-[1px] rounded-xl border-red-500 ' >
-              Logout
+            <button
+              onClick={() => logout()}
+              className={`px-3 py-1 text-red-500 text-sm tracking-wide font-thin border-[1px] rounded-xl border-red-500 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              disabled={isLoading}
+            >
+              {isLoading ? 'Logging out...' : 'Logout'}
             </button>
+
           </div>
         </div>
       </div>
