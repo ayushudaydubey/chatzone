@@ -202,6 +202,8 @@ app.get("/user/messages", async (req, res) => {
   }
 })
 
+
+
 const onlineUsers = new Map()
 
 // Function to get all users with their online status
@@ -295,6 +297,9 @@ io.on("connection", (socket) => {
 })
 
 // Routes
+
+
+
 app.use("/user", routes)
 
 server.listen(3000, () => {
