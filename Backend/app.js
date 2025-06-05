@@ -19,7 +19,7 @@ const server = createServer(app)
 // Initialize Socket.IO FIRST
 const io = new Server(server, {
   cors: {
-    origin: 'http://localhost:5173',
+    origin: ['http://localhost:5173','https://chat-app-react-neon-nine.vercel.app'],
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -51,7 +51,7 @@ const upload = multer({
 
 // CORS setup
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: ['http://localhost:5173','https://chat-app-react-neon-nine.vercel.app'],
   credentials: true
 }))
 
