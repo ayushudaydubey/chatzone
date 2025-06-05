@@ -4,7 +4,6 @@ import UserList from '../Components/UserList';
 import ChatHeader from '../Components/ChatHeader';
 import ChatMessages from '../Components/ChatMessages';
 import ChatInput from '../Components/ChatInput';
-import './ChatPage.css'
 
 const ChatPage = () => {
   const [isUserListOpen, setIsUserListOpen] = useState(false);
