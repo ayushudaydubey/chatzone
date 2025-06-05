@@ -166,6 +166,7 @@ export const logoutUserController = async (req, res) => {
 export async function verifyTokenMiddleware(req, res, next) {
   try {
     const token = req.cookies.token;
+    console.log("token",token);
 
     if (!token) {
       return res.status(401).json({ error: "Access denied. No token provided." });
