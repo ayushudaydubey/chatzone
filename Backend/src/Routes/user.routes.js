@@ -1,4 +1,5 @@
 import express from 'express';
+
 import { 
   loginUserController, 
   registerUserController, 
@@ -7,10 +8,16 @@ import {
   getAllUsersController,
   getMeController
 } from '../Controllers/user.controller.js';
-import { getMessagesController, messageController } from '../Controllers/message.controller.js';
+import { aiMessageSaveController,
+  getMessagesController, messageController,
+
+   } from '../Controllers/message.controller.js';
+import { aiChatController } from '../Services/ai.service.js';
+
 // import { aiChatController } from '../Services/ai.service.js';
 
 const routes = express.Router();
+
 
 // Auth routes
 routes.post("/register", registerUserController);
@@ -19,7 +26,12 @@ routes.post("/logout", verifyTokenMiddleware, logoutUserController);
 
 // Protected routes
 routes.post("/chat", verifyTokenMiddleware, messageController);
-// routes.post("/askSomething", aiChatController)
+
+// For AI chat functionality
+routes.post("/askSomething", verifyTokenMiddleware, aiChatController)
+
+// Optional: If you want to save AI messages separately
+routes.post("/save-ai-message", verifyTokenMiddleware, aiMessageSaveController)
 
 routes.get("/chat/:senderId/:receiverId", verifyTokenMiddleware, getMessagesController);
 
@@ -31,6 +43,11 @@ routes.get("/all-users", verifyTokenMiddleware, getAllUsersController);
 
 // Route to get messages between users (protected)
 routes.get("/messages", verifyTokenMiddleware, getMessagesController);
+
+// routes.get("/unread-messages", verifyTokenMiddleware, unreadMessageController);
+// routes.get("/all-recent-messages",verifyTokenMiddleware,getAllRecentMessage)
+
+
 
 
 

@@ -47,3 +47,35 @@ export async function getMessagesController(req, res) {
     res.status(500).json({ message: "Failed to fetch messages", error: error.message });
   }
 }
+
+// ai mseesge save controller // Backend mein AI response save karna
+export async function aiMessageSaveController(req, res) {
+  try {
+    const { message, chatHistory, senderId } = req.body;
+    
+    // User message save karo
+    await saveMessage({
+      fromUser: senderId,
+      toUser: 'Elva (Ai)',
+      message: message,
+      timestamp: new Date()
+    });
+    
+    // AI response generate karo
+    const aiResponse = await getAIResponse(message, chatHistory);
+    
+    // AI response save karo
+    await saveMessage({
+      fromUser: 'Elva (Ai)',
+      toUser: senderId,
+      message: aiResponse,
+      timestamp: new Date(),
+       isRead: false 
+    });
+    
+    res.json({ success: true, response: aiResponse });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+

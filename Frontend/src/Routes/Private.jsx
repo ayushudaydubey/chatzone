@@ -13,10 +13,7 @@ const Private = ({ children }) => {
       try {
         // Make a request to verify the JWT token in cookie
         // Since cookies are sent automatically, no need to manually attach token
-const response = await axiosInstance.get('/user/auth/me', {
-  withCredentials: true
-});
-
+        const response = await axiosInstance.get('/user/auth/me');
         
         if (response.status === 200 && response.data) {
           // Token is valid, user is authenticated

@@ -33,6 +33,18 @@ const Register = () => {
       toast.warning("Password must be at least 6 characters");
       return;
     }
+      if (!formData.mobileNo == 10) {
+      toast.warning("To valid Mobile number 10 digits are required");
+      return;
+    }
+     if ((!formData.mobileNo.startsWith(6 || 7 || 8 || 9))) {
+      toast.error("Valid mobile number is required");
+      return;
+    }
+      if ((!formData.email.includes("@" &&"com"))) {
+      toast.error("Enter Valid Email");
+      return;
+    }
 
     setLoading(true);
 

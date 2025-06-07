@@ -1,3 +1,5 @@
+// Update your message model (chat.models.js) to include isRead field
+
 import mongoose from 'mongoose'
 
 const messageSchema = new mongoose.Schema({
@@ -27,9 +29,21 @@ const messageSchema = new mongoose.Schema({
   timeStamp: {
     type: Date,
     default: Date.now
+  },
+  // Add these new fields for read status
+  isRead: {
+    type: Boolean,
+    default: false
+  },
+  readAt: {
+    type: Date
   }
 })
 
-const messageModel = mongoose.model('message', messageSchema)
+// Add indexes for better performance
+messageSchema.index({ senderId: 1, receiverId: 1, timeStamp: -1 })
+messageSchema.index({ receiverId: 1, isRead: 1 })
+
+const messageModel = mongoose.model('Message', messageSchema)
 
 export default messageModel

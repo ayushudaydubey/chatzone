@@ -1,8 +1,7 @@
 import React from 'react';
-import { X, MessageCircle  } from 'lucide-react';
+import { X, MessageCircle, Bot, Sparkles } from 'lucide-react';
 import { useContext } from 'react';
 import { chatContext } from '../Context/Context';
-
 
 const UserList = ({
   users,
@@ -16,18 +15,18 @@ const UserList = ({
   getUnreadCount,
   getLastMessage,
   getTotalUnreadCount,
-
-
 }) => {
-const { logout, isLoading , } = useContext(chatContext);
-
-
-
+  const { logout, isLoading, markMessagesAsRead } = useContext(chatContext);
 
   const allUsers = users || [];
   const totalUnread = getTotalUnreadCount ? getTotalUnreadCount() : 0;
 
-
+  // Helper function to check if user is Elva AI
+  const isElvaAI = (userName) => {
+    if (!userName) return false;
+    const name = userName.toLowerCase();
+    return name.includes('elva') || name.includes('elva ai');
+  };
 
   // Helper function to truncate message text
   const truncateMessage = (message, maxLength = 30) => {
@@ -35,8 +34,6 @@ const { logout, isLoading , } = useContext(chatContext);
     if (message.length <= maxLength) return message;
     return message.substring(0, maxLength) + '...';
   };
-
-
 
   // Helper function to format timestamp for last message
   const formatLastMessageTime = (timestamp) => {
@@ -57,31 +54,47 @@ const { logout, isLoading , } = useContext(chatContext);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  // Handle user selection with immediate unread count removal
+  const handleUserClick = async (userName) => {
+    const unreadCount = getUnreadCount ? getUnreadCount(userName) : 0;
+
+    // Set the selected user
+    setToUser(userName);
+
+    // Immediately mark messages as read if there are unread messages
+    if (unreadCount > 0 && markMessagesAsRead) {
+      await markMessagesAsRead(userName);
+    }
+
+    // Close the user list on mobile
+    onClose();
+  };
+
   return (
     <>
       {/* Mobile Overlay Background */}
       <div
-        className={`fixed inset-0  bg-opacity-50 z-40 lg:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        className={`fixed inset-0 bg-opacity-50 z-40 lg:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
           }`}
         onClick={onClose}
       />
 
       {/* User List Container */}
       <div className={`
-        fixed  lg:relative top-0 left-0 h-full w-72 sm:w-80 md:w-96 lg:w-full bg-zinc-900 border-r border-gray-700 z-50 lg:z-auto
+        fixed lg:relative top-0 left-0 h-full w-72 sm:w-80 md:w-96 lg:w-full bg-zinc-950 border-r border-blue-400/30 z-50 lg:z-auto
         transform transition-transform duration-300 ease-in-out lg:transform-none flex flex-col
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
 
-        {/* Unified Header - Same for Mobile and Desktop */}
-        <div className="  p-4 border-b border-gray-700 bg-zinc-950 flex-shrink-0">
+        {/* Unified Header */}
+        <div className="relative p-4 border-b border-gray-700 bg-zinc-950 flex-shrink-0">
           <h2 className="text-blue-200 font-semibold text-2xl tracking-wide">Chatzone</h2>
           <div className="flex items-center gap-2">
             <h2 className="text-blue-200 font-thin text-md">All registered users</h2>
 
             {totalUnread > 0 && (
-              <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium animate-pulse">
-                <span className='mt-4'>New Messages  {totalUnread}</span>
+              <span className="animate-pulse shadow-sm shadow-pink-600 bg-gradient-to-b from-red-600/70 to-pink-700/70 absolute top-5 right-10 text-white text-xs px-2 py-2 rounded tracking-wide font-thin">
+                <span className=''> {totalUnread} New Messages </span>
               </span>
             )}
           </div>
@@ -94,10 +107,7 @@ const { logout, isLoading , } = useContext(chatContext);
           </button>
         </div>
 
-        {/* Current User Section - Shows on Both Mobile and Desktop */}
-
-
-        {/* Users List - Scrollable Container with Fixed Positioning */}
+        {/* Users List - Scrollable Container */}
         <div className="flex-1 min-h-0 relative">
           <div className="absolute inset-0 overflow-y-auto overflow-x-hidden">
             <div className="min-h-full">
@@ -107,45 +117,69 @@ const { logout, isLoading , } = useContext(chatContext);
                 const { username: userName, isOnline } = userObj;
                 const unreadCount = getUnreadCount ? getUnreadCount(userName) : 0;
                 const lastMessage = getLastMessage ? getLastMessage(userName) : null;
+                const isAI = isElvaAI(userName);
 
                 return (
                   <div
                     key={`${userName}-${index}`}
-                    onClick={() => {
-                      setToUser(userName);
-                      onClose();
-                    }}
-                    className={`relative flex items-start gap-3 p-4 cursor-pointer transition-all duration-200 border-b border-gray-800 hover:border-gray-700
-                      ${toUser === userName
-                        ? 'bg-green-800/30 border-green-700/50 shadow-lg'
-                        : unreadCount > 0
-                          ? 'bg-blue-900/20 hover:bg-blue-800/30'
-                          : 'hover:bg-gray-800/60'
+                    onClick={() => handleUserClick(userName)}
+                    className={`relative flex items-start gap-3 p-4 cursor-pointer transition-all duration-200 border-b hover:border-gray-700
+                      ${isAI
+                        ? `border-cyan-700/40 ${toUser === userName
+                          ? 'bg-gradient-to-r from-teal-900/20 via-cyan-900/30 to-emerald-900/30 border-cyan-700/70 shadow-lg shadow-cyan-800/10'
+                          : 'bg-gradient-to-r from-teal-950/30 via-cyan-950/30 to-emerald-950/30 hover:from-teal-900/10 hover:via-cyan-900/20 hover:to-emerald-900/30 hover:shadow-md hover:shadow-cyan-900/10'
+                        }`
+                        : `border-gray-600 ${toUser === userName
+                          ? 'bg-green-900/30'
+                          : unreadCount > 0
+                            ? 'bg-zinc-950 hover:bg-zinc-950/80'
+                            : 'hover:bg-zinc-900'
+                        }`
                       }
                     `}
                   >
                     {/* User Avatar */}
                     <div className="relative flex-shrink-0 mt-1">
-                      <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-md">
-                        <span className="text-white font-semibold text-sm">
-                          {userName?.charAt(0)?.toUpperCase() || '?'}
-                        </span>
-                      </div>
+                      {isAI ? (
+                        <div className="w-10 h-10 bg-zinc-950 rounded-full flex items-center justify-center shadow-lg border-[1px] border-cyan-500 ring-2 ring-cyan-400/30 animate-pulse">
+                          <Bot className="text-blue-200 w-6 h-6 drop-shadow-md " />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 border-[1px] border-green-600 bg-gradient-to-br from-zinc-950 to-green-800 rounded-full flex items-center justify-center shadow-md">
+                          <span className="text-white font-semibold text-sm">
+                            {userName?.charAt(0)?.toUpperCase() || '?'}
+                          </span>
+                        </div>
+                      )}
+
                       {/* Online/Offline Status Indicator */}
-                      <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-zinc-900 ${isOnline
-                        ? 'bg-green-500 shadow-green-500/50 shadow-sm'
-                        : 'bg-gray-500 shadow-gray-500/50 shadow-sm'
+                      <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-zinc-900 ${isAI
+                          ? 'bg-green-500 shadow-cyan-400/60 shadow-md animate-pulse'
+                          : isOnline
+                            ? 'bg-green-500 shadow-green-500/50 shadow-sm'
+                            : 'bg-gray-500 shadow-gray-500/50 shadow-sm'
                         }`} />
                     </div>
 
                     {/* User Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <p className="text-white font-medium capitalize truncate text-sm sm:text-base">
-                          {userName || 'Unknown User'}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className={`font-medium capitalize truncate text-sm sm:text-base ${isAI
+                              ? 'text-blue-200'
+                              : 'text-white'
+                            }`}>
+                            {userName || 'Unknown User'}
+                          </p>
+                          {isAI && (
+                            <div className="flex items-center gap-1px-2 py-1">
+                              <Sparkles className="w-3 h-3 text-cyan-400 animate-ping" />
+                            </div>
+                          )}
+                        </div>
                         {lastMessage && (
-                          <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
+                          <span className={`text-xs flex-shrink-0 ml-2 ${isAI ? 'text-blue-200' : 'text-gray-400'
+                            }`}>
                             {formatLastMessageTime(lastMessage.timestamp)}
                           </span>
                         )}
@@ -157,42 +191,58 @@ const { logout, isLoading , } = useContext(chatContext);
                           {lastMessage.isFile ? (
                             <>
                               <span className="text-xs">📎</span>
-                              <p className="text-xs text-gray-400 truncate">
+                              <p className={`text-xs truncate ${isAI ? 'text-teal-200' : 'text-gray-400'
+                                }`}>
                                 Sent a file
                               </p>
                             </>
                           ) : (
-                            <p className={`text-xs truncate ${unreadCount > 0 ? 'text-white font-medium' : 'text-gray-400'}`}>
+                            <p className={`text-xs truncate ${unreadCount > 0
+                                ? isAI
+                                  ? 'text-blue-200 '
+                                  : 'text-white font-medium'
+                                : isAI
+                                  ? 'text-blue-200'
+                                  : 'text-gray-400'
+                              }`}>
                               {truncateMessage(lastMessage.message)}
                             </p>
                           )}
                         </div>
                       ) : (
-                        <p className={`text-xs sm:text-sm font-medium ${isOnline ? 'text-green-400' : 'text-gray-400'
+                        <p className={`text-xs sm:text-sm font-medium ${isAI
+                            ? 'text-blue-300/50 font-thin tracking-wide flex items-center gap-1'
+                            : isOnline
+                              ? 'text-green-400'
+                              : 'text-gray-400'
                           }`}>
-                          {isOnline ? 'Online' : 'Offline'}
+                          {isAI ? (
+                            <>
+                              AI Assistant
+                            </>
+                          ) : isOnline ? 'Online' : 'Offline'}
                         </p>
                       )}
                     </div>
 
-                    {/* Message Indicators */}
-                    <div className="flex-shrink-0 flex items-center gap-2">
-                      {/* Unread Message Count */}
+                    {/* Message Indicators - ONLY show if there are actually unread messages */}
+                    <div className="flex-shrink-0 flex items-center">
+                      {/* Unread Message Count - ONLY show if unreadCount > 0 */}
                       {unreadCount > 0 && (
-                        <div className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] h-5 flex items-center justify-center animate-pulse">
-                          <span>New   {unreadCount > 99 ? '99+' : unreadCount}</span>
+                        <div className={`inset-1 border-[1px] text-[12px] font-normal px-3 py-1 rounded-full min-w-[20px] animate-bounce ${isAI
+                            ? 'bg-gradient-to-r from-teal-900/80 via-cyan-900/80 to-emerald-900/80 border-cyan-400 text-cyan-100 shadow-lg shadow-cyan-500/30'
+                            : 'border-green-500 text-green-400'
+                          }`}>
+                          <span className='flex items-center gap-2 justify-center'>
+                            New {unreadCount > 99 ? '99+' : unreadCount}
+                          </span>
                         </div>
-                      )}
-
-                      {/* New Message Icon */}
-                      {unreadCount > 0 && toUser !== userName && (
-                        <MessageCircle size={14} className="text-blue-400 animate-pulse" />
                       )}
                     </div>
 
-                    {/* New Message Pulse Effect */}
-                    {unreadCount > 0 && toUser !== userName && (
-                      <div className="absolute inset-0 border-2 border-blue-400 rounded-lg animate-pulse pointer-events-none opacity-30"></div>
+                    {/* AI Special Glow Effect */}
+                    {isAI && (
+                      <div className="absolute inset-0 rounded-lg pointer-events-none bg-gradient-to-r from-teal-500/5 via-cyan-500/5 to-emerald-500/5 shadow-inner"></div>
                     )}
                   </div>
                 );
@@ -210,12 +260,13 @@ const { logout, isLoading , } = useContext(chatContext);
               )}
             </div>
           </div>
-
         </div>
-        <div className="border-b border-gray-700 p-4  bg-zinc-950 flex-shrink-0">
+
+        {/* Current User Section */}
+        <div className="p-4 border-[1px] border-blue-400/30 rounded flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="relative flex-shrink-0">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center shadow-md">
+              <div className="animate-pulse w-10 h-10 bg-gradient-to-br from-zinc-900 via-pink-700 to-zinc-900 rounded-full flex items-center justify-center shadow-lg ring-2 ring-red-500">
                 <span className="text-white font-semibold text-sm">
                   {username?.charAt(0)?.toUpperCase() || '?'}
                 </span>
@@ -223,20 +274,19 @@ const { logout, isLoading , } = useContext(chatContext);
               <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-zinc-800 shadow-green-500/50 shadow-sm" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white font-medium capitalize truncate text-sm">
+              <p className="text-blue-200 font-medium capitalize truncate text-sm">
                 {username} (You)
               </p>
-              <p className="text-green-400 text-xs font-medium">Online</p>
+              <p className="text-green-600/70 text-xs font-medium">Online</p>
             </div>
             <button
               onClick={() => logout()}
-              className={`px-3 py-1 text-red-500 text-sm tracking-wide font-thin border-[1px] rounded-xl border-red-500 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''
+              className={`px-4 py-1 text-red-500 text-xs cursor-pointer transition-all tracking-wide font-thin border-[1px] rounded-md border-red-500/60 hover:scale-95 hover:text-blue-50 hover:shadow-sm hover:shadow-red-500 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               disabled={isLoading}
             >
               {isLoading ? 'Logging out...' : 'Logout'}
             </button>
-
           </div>
         </div>
       </div>

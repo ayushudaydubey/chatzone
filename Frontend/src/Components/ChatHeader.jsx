@@ -45,7 +45,7 @@ const ChatHeader = ({ toUser, users, onToggleUserList }) => {
       <div className="lg:hidden flex-shrink-0">
         {toUser && (
           <div className="relative">
-            <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
+            <div className="w-8 h-8 bg-gradient-to-br from-zinc-950 to-green-800 rounded-full flex items-center justify-center">
               <span className="text-white font-semibold text-xs">
                 {toUser.charAt(0).toUpperCase()}
               </span>

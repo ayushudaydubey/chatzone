@@ -63,7 +63,7 @@ app.get("/", (req, res) => {
   res.send("Home")
 })
 
-// File upload endpoint - NOW io is available
+// File upload endpoint
 app.post("/user/upload-file", upload.single('file'), async (req, res) => {
   try {
     console.log('File upload request received')
@@ -104,7 +104,8 @@ app.post("/user/upload-file", upload.single('file'), async (req, res) => {
         mimeType: req.file.mimetype,
         imageKitFileId: uploadResponse.fileId
       },
-      timeStamp: new Date()
+      timeStamp: new Date(),
+      isRead: false
     })
 
     await fileMessage.save()
@@ -202,7 +203,130 @@ app.get("/user/messages", async (req, res) => {
   }
 })
 
+// Get unread messages endpoint - MOVED OUTSIDE SOCKET HANDLER
+app.get("/user/unread-messages", async (req, res) => {
+  try {
+    const { username } = req.query // Get username from query params instead
+    
+    if (!username) {
+      return res.status(400).json({ error: "Username is required" })
+    }
 
+    // Get all messages where user is receiver and message is unread
+    const unreadMessages = await messageModel.aggregate([
+      {
+        $match: {
+          receiverId: username,
+          isRead: { $ne: true } // Messages that are not marked as read
+        }
+      },
+      {
+        $group: {
+          _id: "$senderId",
+          count: { $sum: 1 },
+          lastMessage: {
+            $last: {
+              message: "$message",
+              timestamp: "$timeStamp",
+              messageType: "$messageType",
+              fileInfo: "$fileInfo"
+            }
+          }
+        }
+      }
+    ])
+
+    // Also get last messages for all conversations
+    const lastMessages = await messageModel.aggregate([
+      {
+        $match: {
+          $or: [
+            { senderId: username },
+            { receiverId: username }
+          ]
+        }
+      },
+      {
+        $sort: { timeStamp: -1 }
+      },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              { $eq: ["$senderId", username] },
+              "$receiverId",
+              "$senderId"
+            ]
+          },
+          lastMessage: {
+            $first: {
+              message: "$message",
+              timestamp: "$timeStamp",
+              messageType: "$messageType",
+              fileInfo: "$fileInfo",
+              senderId: "$senderId"
+            }
+          }
+        }
+      }
+    ])
+
+    // Format unread counts
+    const unreadCounts = {}
+    unreadMessages.forEach(item => {
+      unreadCounts[item._id] = item.count
+    })
+
+    // Format last messages
+    const lastMessagesFormatted = {}
+    lastMessages.forEach(item => {
+      lastMessagesFormatted[item._id] = {
+        message: item.lastMessage.message,
+        timestamp: item.lastMessage.timestamp,
+        isFile: item.lastMessage.messageType === 'file'
+      }
+    })
+
+    res.json({
+      success: true,
+      unreadCounts,
+      lastMessages: lastMessagesFormatted
+    })
+
+  } catch (error) {
+    console.error('Error fetching unread messages:', error)
+    res.status(500).json({ error: 'Failed to fetch unread messages' })
+  }
+})
+
+// Mark messages as read endpoint - MOVED OUTSIDE SOCKET HANDLER
+app.post("/user/mark-read", async (req, res) => {
+  try {
+    const { senderId, receiverId } = req.body
+    
+    if (!senderId || !receiverId) {
+      return res.status(400).json({ error: "senderId and receiverId are required" })
+    }
+
+    // Mark all messages from senderId to receiverId as read
+    await messageModel.updateMany(
+      {
+        senderId: senderId,
+        receiverId: receiverId,
+        isRead: { $ne: true }
+      },
+      {
+        $set: { isRead: true, readAt: new Date() }
+      }
+    )
+
+    res.json({ success: true })
+
+  } catch (error) {
+    console.error('Error marking messages as read:', error)
+    res.status(500).json({ error: 'Failed to mark messages as read' })
+  }
+})
 
 const onlineUsers = new Map()
 
@@ -240,16 +364,22 @@ io.on("connection", (socket) => {
     console.log(`${username} came online. Total users:`, usersWithStatus.length)
   })
 
+  // SINGLE private-message handler with proper read status
   socket.on("private-message", async ({ fromUser, toUser, message }) => {
     try {
       const timestamp = new Date()
+      
+      // Check if receiver is online
+      const receiverSocket = Array.from(io.sockets.sockets.values())
+        .find(s => s.username === toUser)
       
       const newMessage = new messageModel({
         senderId: fromUser,
         receiverId: toUser,
         message,
         messageType: 'text',
-        timeStamp: timestamp
+        timeStamp: timestamp,
+        isRead: false // Always start as unread
       })
 
       await newMessage.save()
@@ -297,9 +427,6 @@ io.on("connection", (socket) => {
 })
 
 // Routes
-
-
-
 app.use("/user", routes)
 
 server.listen(3000, () => {

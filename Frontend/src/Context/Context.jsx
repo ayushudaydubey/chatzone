@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import axiosInstance, { fileUploadInstance } from '../utils/axios';
 
@@ -15,58 +15,93 @@ const Context = (props) => {
   const [receiverId, setReceiverId] = useState("");
   const [users, setUsers] = useState([]);
   const [toUser, setToUser] = useState("");
-  const [isLoading, setIsLoading] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState({});
   const [lastMessages, setLastMessages] = useState({});
+  
   // AI Bot related state
   const [isAiTyping, setIsAiTyping] = useState(false);
-  const AI_BOT_NAME = "AI Friend";
+  const AI_BOT_NAME = "Elva Ai";
   const messagesEndRef = useRef(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Helper function to safely check if value is array
+  const safeArrayCheck = (arr) => {
+    return Array.isArray(arr) ? arr : [];
+  };
+
+  // Get AI chat history for context
+  const getAiChatHistory = () => {
+    return messages
+      .filter(msg => 
+        (msg.fromUser === username && msg.toUser === AI_BOT_NAME) ||
+        (msg.fromUser === AI_BOT_NAME && msg.toUser === username)
+      )
+      .slice(-10) // Keep last 10 messages for context
+      .map(msg => ({
+        role: msg.fromUser === AI_BOT_NAME ? 'assistant' : 'user',
+        content: msg.message
+      }));
+  };
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => {
-    // Fetch current user from backend using cookie
-    const fetchCurrentUser = async () => {
-      try {
-        const response = await axiosInstance.get("/user/auth/me");
-        if (response.data && response.data.name) {
-          setUsername(response.data.name);
-          setIsRegistered(true);
-          socket.emit("register-user", response.data.name);
-          await loadAllUsers();
-          // Add AI Friend to users list if not present
-          setUsers(prev => {
-            const hasAiBot = prev.some(user =>
-              (typeof user === 'object' ? user.username : user) === AI_BOT_NAME
-            );
-            if (!hasAiBot) {
-              return [
-                { username: AI_BOT_NAME, isOnline: true, isAiBot: true },
-                ...prev
-              ];
-            }
-            return prev;
-          });
-        } else {
-          setUsername("");
-          setIsRegistered(false);
-        }
-      } catch (error) {
-        console.error("Error fetching current user:", error);
-        setUsername("");
-        setIsRegistered(false);
+  // Function to fetch unread messages and last messages from database
+  const fetchUnreadAndLastMessages = useCallback(async () => {
+    if (!username) return;
+    
+    try {
+      console.log('Fetching unread messages for:', username);
+      
+      const response = await axiosInstance.get('/user/unread-messages', {
+        params: { username } 
+      });
+      
+      if (response.data.success) {
+        const newUnreadMessages = response.data.unreadCounts || {};
+        const newLastMessages = response.data.lastMessages || {};
+        
+        setUnreadMessages(newUnreadMessages);
+        setLastMessages(newLastMessages);
+        
+        console.log('Updated unread messages state:', newUnreadMessages);
       }
-    };
+    } catch (error) {
+      console.error("Error fetching unread messages:", error);
+    }
+  }, [username]);
 
-    fetchCurrentUser();
-  }, []);
+  // Function to mark messages as read
+  const markMessagesAsRead = useCallback(async (selectedUser) => {
+    if (!selectedUser || !username) return;
+    
+    try {
+      console.log(`Marking messages as read from: ${selectedUser}`);
+      
+      // API call to mark messages as read
+      await axiosInstance.post('/user/mark-read', {
+        senderId: selectedUser,
+        receiverId: username
+      });
+      
+      // Immediately update local state to remove unread count for this user
+      setUnreadMessages(prev => {
+        const updated = { ...prev };
+        delete updated[selectedUser];
+        console.log(`Removed unread count for: ${selectedUser}`, updated);
+        return updated;
+      });
+      
+    } catch (error) {
+      console.error("Error marking messages as read:", error);
+    }
+  }, [username]);
 
   // Function to load all registered users
-  const loadAllUsers = async () => {
+  const loadAllUsers = useCallback(async () => {
     try {
       const response = await axiosInstance.get('/user/all-users');
       if (response.data) {
@@ -77,6 +112,7 @@ const Context = (props) => {
             isOnline: false,
             lastSeen: null
           }));
+        
         // Add AI Friend at the top of the list
         const usersWithAI = [
           { username: AI_BOT_NAME, isOnline: true, isAiBot: true },
@@ -87,28 +123,82 @@ const Context = (props) => {
     } catch (error) {
       console.error("Error loading users:", error);
     }
-  };
+  }, [username, AI_BOT_NAME]);
 
-  // Function to mark messages as read for a specific user
-  const markMessagesAsRead = (fromUser) => {
-    setUnreadMessages(prev => {
-      const updated = { ...prev };
-      delete updated[fromUser];
-      return updated;
-    });
-  };
+  // Main initialization effect
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        const response = await axiosInstance.get("/user/auth/me");
+        if (response.data && response.data.name) {
+          setUsername(response.data.name);
+          setIsRegistered(true);
+          socket.emit("register-user", response.data.name);
+          
+          // Load users first
+          await loadAllUsers();
+          
+          // Fetch unread messages after a short delay to ensure everything is loaded
+          setTimeout(async () => {
+            await fetchUnreadAndLastMessages();
+            setIsInitialized(true);
+          }, 500);
+          
+        } else {
+          setUsername("");
+          setIsRegistered(false);
+          setIsInitialized(true);
+        }
+      } catch (error) {
+        console.error("Error fetching current user:", error);
+        setUsername("");
+        setIsRegistered(false);
+        setIsInitialized(true);
+      }
+    };
 
-  // Function to get unread count for a user
+    initializeApp();
+  }, [loadAllUsers, fetchUnreadAndLastMessages]);
+
+  // Add AI bot to users list when username is available
+  useEffect(() => {
+    if (username) {
+      setUsers(prev => {
+        const hasAiBot = prev.some(user =>
+          (typeof user === 'object' ? user.username : user) === AI_BOT_NAME
+        );
+        if (!hasAiBot) {
+          return [
+            { username: AI_BOT_NAME, isOnline: true, isAiBot: true },
+            ...prev
+          ];
+        }
+        return prev;
+      });
+    }
+  }, [username, AI_BOT_NAME]);
+
+  // Mark messages as read when user selects a chat
+  useEffect(() => {
+    if (toUser && username && isInitialized) {
+      const timer = setTimeout(() => {
+        console.log(`Marking messages as read for selected user: ${toUser}`);
+        markMessagesAsRead(toUser);
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [toUser, username, isInitialized, markMessagesAsRead]);
+
+  // Helper functions for unread messages and last messages
   const getUnreadCount = (fromUser) => {
     return unreadMessages[fromUser] || 0;
   };
 
-  // Function to get last message for a user
   const getLastMessage = (fromUser) => {
     return lastMessages[fromUser] || null;
   };
 
-  // Helper function to get online users only
   const getOnlineUsers = () => {
     return users.filter(user => {
       const userObj = typeof user === 'object' ? user : { username: user, isOnline: true };
@@ -116,14 +206,16 @@ const Context = (props) => {
     });
   };
 
-  // Helper function to get total unread messages count
   const getTotalUnreadCount = () => {
     return Object.values(unreadMessages).reduce((total, count) => total + count, 0);
   };
 
   // Socket event listeners
   useEffect(() => {
-    socket.on("private-message", (messageData) => {
+    const handlePrivateMessage = (messageData) => {
+      console.log('Received private message:', messageData);
+      
+      // Add message to state if it doesn't already exist
       setMessages(prev => {
         const exists = prev.some(msg =>
           msg.fromUser === messageData.fromUser &&
@@ -137,19 +229,26 @@ const Context = (props) => {
         return prev;
       });
 
-      if (messageData.fromUser !== username && messageData.toUser === username && messageData.fromUser !== toUser) {
-        setUnreadMessages(prev => ({
-          ...prev,
-          [messageData.fromUser]: (prev[messageData.fromUser] || 0) + 1
-        }));
-        setLastMessages(prev => ({
-          ...prev,
-          [messageData.fromUser]: {
-            message: messageData.message,
-            timestamp: messageData.timestamp,
-            isFile: messageData.isFile || messageData.messageType === 'file'
-          }
-        }));
+      // Update unread messages count - ONLY for incoming messages from OTHER users
+      // and ONLY if the sender is not the currently selected user
+      if (messageData.fromUser !== username && 
+          messageData.toUser === username && 
+          messageData.fromUser !== toUser && 
+          messageData.fromUser !== AI_BOT_NAME &&
+          isInitialized) {
+        
+        console.log(`Incrementing unread count for ${messageData.fromUser}`);
+        
+        setUnreadMessages(prev => {
+          const newCount = (prev[messageData.fromUser] || 0) + 1;
+          console.log(`New unread count for ${messageData.fromUser}:`, newCount);
+          return {
+            ...prev,
+            [messageData.fromUser]: newCount
+          };
+        });
+        
+        // Show notification only for unread messages
         if (Notification.permission === 'granted') {
           new Notification(`New message from ${messageData.fromUser}`, {
             body: messageData.isFile || messageData.messageType === 'file' ? '📎 Sent a file' : messageData.message,
@@ -157,6 +256,8 @@ const Context = (props) => {
           });
         }
       }
+
+      // Update last messages for all conversations
       if (messageData.fromUser !== username && messageData.toUser === username) {
         setLastMessages(prev => ({
           ...prev,
@@ -177,9 +278,9 @@ const Context = (props) => {
           }
         }));
       }
-    });
+    };
 
-    socket.on("update-users", (usersWithStatus) => {
+    const handleUpdateUsers = (usersWithStatus) => {
       if (Array.isArray(usersWithStatus)) {
         const filteredUsers = usersWithStatus
           .filter(user => {
@@ -200,6 +301,7 @@ const Context = (props) => {
               };
             }
           });
+        
         // Add AI Friend to the filtered users list
         const usersWithAI = [
           { username: AI_BOT_NAME, isOnline: true, isAiBot: true },
@@ -207,9 +309,9 @@ const Context = (props) => {
         ];
         setUsers(usersWithAI);
       }
-    });
+    };
 
-    socket.on("user-disconnected", (disconnectedUser) => {
+    const handleUserDisconnected = (disconnectedUser) => {
       setUsers(prev => prev.map(user => {
         const userName = typeof user === 'object' ? user.username : user;
         if (userName === disconnectedUser) {
@@ -219,14 +321,15 @@ const Context = (props) => {
         }
         return user;
       }));
-    });
+    };
 
-    socket.on("user-connected", (connectedUser) => {
+    const handleUserConnected = (connectedUser) => {
       setUsers(prev => {
         const existingUserIndex = prev.findIndex(user => {
           const userName = typeof user === 'object' ? user.username : user;
           return userName === connectedUser;
         });
+        
         if (existingUserIndex !== -1) {
           const updatedUsers = [...prev];
           updatedUsers[existingUserIndex] = typeof prev[existingUserIndex] === 'object' ?
@@ -240,133 +343,141 @@ const Context = (props) => {
         }
         return prev;
       });
-    });
+    };
+
+    // Add socket listeners
+    socket.on("private-message", handlePrivateMessage);
+    socket.on("update-users", handleUpdateUsers);
+    socket.on("user-disconnected", handleUserDisconnected);
+    socket.on("user-connected", handleUserConnected);
 
     return () => {
-      socket.off("private-message");
-      socket.off("update-users");
-      socket.off("user-disconnected");
-      socket.off("user-connected");
+      socket.off("private-message", handlePrivateMessage);
+      socket.off("update-users", handleUpdateUsers);
+      socket.off("user-disconnected", handleUserDisconnected);
+      socket.off("user-connected", handleUserConnected);
     };
-  }, [username, toUser]);
+  }, [username, toUser, isInitialized, AI_BOT_NAME]);
 
-  useEffect(() => {
-    if (toUser) {
-      setTimeout(() => {
-        markMessagesAsRead(toUser);
-      }, 100);
-    }
-  }, [toUser, messages]);
-
-  // UPDATED: Load chat history function to handle AI messages
-  const loadChatHistory = async () => {
+  // Load chat history function
+  const loadChatHistory = useCallback(async () => {
     if (!username || !toUser) return;
+    
     try {
-      if (toUser === AI_BOT_NAME) {
-        // For AI Friend, filter local messages
-        const aiMessages = messages.filter(msg =>
-          (msg.fromUser === username && msg.toUser === AI_BOT_NAME) ||
-          (msg.fromUser === AI_BOT_NAME && msg.toUser === username)
-        );
-        setMessages(aiMessages);
-      } else {
-        // For real users, load from server
-        const response = await axiosInstance.get(`/user/messages?senderId=${username}&receiverId=${toUser}`);
-        if (response.data) {
-          setMessages(response.data);
-        }
+      const response = await axiosInstance.get(`/user/messages?senderId=${username}&receiverId=${toUser}`);
+      if (response.data) {
+        setMessages(response.data);
       }
     } catch (error) {
       console.error("Error loading chat history:", error);
     }
-  };
+  }, [username, toUser]);
 
+  // Load chat history when username or toUser changes
   useEffect(() => {
     if (username && toUser) {
       loadChatHistory();
     }
-  }, [username, toUser]);
+  }, [username, toUser, loadChatHistory]);
 
+  // Request notification permission
   useEffect(() => {
     if (Notification.permission === 'default') {
       Notification.requestPermission();
     }
   }, []);
 
-  // NEW: Function to send message to AI
-  const sendToAI = async (userMessage) => {
-    if (!userMessage.trim()) return;
+  // Function to send message to AI
+  const sendToAI = useCallback(async (userMessage) => {
     try {
       setIsAiTyping(true);
-      // Get recent chat history with AI for context
-      const aiChatHistory = messages.filter(msg =>
-        (msg.fromUser === username && msg.toUser === AI_BOT_NAME) ||
-        (msg.fromUser === AI_BOT_NAME && msg.toUser === username)
-      );
+      
+      const userMessageData = {
+        fromUser: username,
+        toUser: AI_BOT_NAME,
+        message: userMessage,
+        timestamp: new Date().toISOString(),
+      };
+      
+      // Add user message to state immediately
+      setMessages(prev => [...safeArrayCheck(prev), userMessageData]);
+
+      // Send to AI endpoint
       const response = await axiosInstance.post('/user/askSomething', {
         message: userMessage,
-        chatHistory: aiChatHistory
+        chatHistory: getAiChatHistory(),
+        senderId: username,
       });
+
       if (response.data.success) {
         const aiMessage = {
           fromUser: AI_BOT_NAME,
           toUser: username,
           message: response.data.response,
           timestamp: new Date().toISOString(),
-          isAiBot: true
+          isAiBot: true,
         };
-        setMessages(prev => [...prev, aiMessage]);
+        
+        // Add AI response to state
+        setMessages(prev => [...safeArrayCheck(prev), aiMessage]);
+        
+        // Update last message for AI chat
         setLastMessages(prev => ({
           ...prev,
           [AI_BOT_NAME]: {
             message: response.data.response,
-            timestamp: aiMessage.timestamp,
+            timestamp: new Date().toISOString(),
             isFile: false
           }
         }));
-      } else {
-        throw new Error(response.data.error || 'AI response failed');
       }
     } catch (error) {
-      console.error('Error getting AI response:', error);
+      console.error("Error sending message to AI:", error);
+      // Add error message to chat
       const errorMessage = {
         fromUser: AI_BOT_NAME,
         toUser: username,
-        message: "Sorry, I'm having trouble responding right now. Please try again! 😅",
+        message: "Sorry, I'm having trouble responding right now. Please try again.",
         timestamp: new Date().toISOString(),
-        isAiBot: true
+        isAiBot: true,
+        isError: true
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => [...safeArrayCheck(prev), errorMessage]);
     } finally {
       setIsAiTyping(false);
     }
-  };
+  }, [username, getAiChatHistory, AI_BOT_NAME]);
 
-  // UPDATED: Handle send function to detect AI messages
+  // Handle send function
   const handleSend = async (e) => {
     e.preventDefault();
     if (!message.trim() || !toUser) return;
+    
     const messageData = {
       fromUser: username,
       toUser: toUser,
       message: message.trim(),
       timestamp: new Date().toISOString()
     };
+    
     try {
-      setMessages(prev => [...prev, messageData]);
       if (toUser === AI_BOT_NAME) {
-        await sendToAI(message.trim());
+        // For AI, use the sendToAI function and clear message immediately
+        const messageToSend = message.trim();
+        setMessage(""); // Clear message immediately to prevent double send
+        await sendToAI(messageToSend);
       } else {
+        // For regular users, add to state and emit
+        setMessages(prev => [...prev, messageData]);
         socket.emit("private-message", messageData);
+        setMessage("");
       }
-      setMessage("");
     } catch (error) {
       console.error("Error sending message:", error);
     }
   };
 
-  // ...existing file upload, register, login, logout, validateSession functions...
-
+  // File upload function
   const handleFileUpload = async (file, onProgress) => {
     if (!toUser) {
       throw new Error('No recipient selected');
@@ -377,10 +488,12 @@ const Context = (props) => {
     if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
       throw new Error('Only image and video files are allowed');
     }
+    
     const formData = new FormData();
     formData.append('file', file);
     formData.append('senderId', username);
     formData.append('receiverId', toUser);
+    
     try {
       const response = await fileUploadInstance.post('/user/upload-file', formData, {
         headers: {
@@ -394,6 +507,7 @@ const Context = (props) => {
         },
         timeout: 300000,
       });
+      
       if (response.data.success) {
         return response.data;
       } else {
@@ -412,6 +526,7 @@ const Context = (props) => {
     }
   };
 
+  // Registration function
   const register = async (userData) => {
     setIsLoading(true);
     try {
@@ -440,6 +555,7 @@ const Context = (props) => {
     }
   };
 
+  // Login function
   const login = async (credentials) => {
     try {
       const response = await axiosInstance.post('/user/login', credentials);
@@ -465,6 +581,7 @@ const Context = (props) => {
     }
   };
 
+  // Logout function
   const logout = async () => {
     setIsLoading(true);
     try {
@@ -475,9 +592,13 @@ const Context = (props) => {
       setUsername('');
       setIsRegistered(false);
       setIsLoading(false);
+      setUnreadMessages({});
+      setLastMessages({});
+      setIsInitialized(false);
     }
   };
 
+  // Session validation function
   const validateSession = async () => {
     try {
       const response = await axiosInstance.get('/user/me');
@@ -501,43 +622,9 @@ const Context = (props) => {
     }
   };
 
-  const contextValue = {
-    username,
-    setUsername,
-    isRegistered,
-    setIsRegistered,
-    validateSession,
-    senderId,
-    setSenderId,
-    receiverId,
-    setReceiverId,
-    message,
-    setMessage,
-    messages,
-    setMessages,
-    users,
-    toUser,
-    setToUser,
-    register,
-    login,
-    handleSend,
-    handleFileUpload,
-    logout,
-    socket,
-    messagesEndRef,
-    loadChatHistory,
-    loadAllUsers,
-    getOnlineUsers,
-    unreadMessages,
-    lastMessages,
-    markMessagesAsRead,
-    getUnreadCount,
-    getLastMessage,
-    getTotalUnreadCount,
-    // AI Bot related values
-    AI_BOT_NAME,
-    isAiTyping,
-    sendToAI
+  const contextValue = { username, setUsername,isRegistered,setIsRegistered,validateSession,senderId,setSenderId,
+    receiverId,setReceiverId, message, setMessage, messages, setMessages,users,toUser,setToUser, register, login, handleSend,handleFileUpload, logout, socket, messagesEndRef, loadChatHistory, loadAllUsers, getOnlineUsers,
+    unreadMessages,lastMessages,markMessagesAsRead,fetchUnreadAndLastMessages,getUnreadCount,getLastMessage,getTotalUnreadCount, AI_BOT_NAME, isAiTyping, sendToAI, isInitialized, isLoading
   };
 
   return (

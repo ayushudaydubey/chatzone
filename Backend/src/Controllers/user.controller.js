@@ -165,13 +165,12 @@ export const logoutUserController = async (req, res) => {
 // Middleware to Verify JWT Token from Cookie
 export async function verifyTokenMiddleware(req, res, next) {
   try {
-    const token = req.cookies.token;
-    console.log("token",token);
-
+    const token = req.cookies['token'];
+    
     if (!token) {
       return res.status(401).json({ error: "Access denied. No token provided." });
     }
-
+    
     const decoded = jwt.verify(token, process.env.SEC_KEY || "default_secret");
     
     // Check if user still exists in database
@@ -179,12 +178,13 @@ export async function verifyTokenMiddleware(req, res, next) {
     if (!user) {
       return res.status(401).json({ error: "User not found" });
     }
-
-    // Add user info to request object
+    
+    // Add user info to request object - include username
     req.user = {
       id: decoded.id,
       email: decoded.email,
-      name: decoded.name || user.name // Ensure name is available
+      name: decoded.name || user.name,
+      username: user.username // Add this line - get username from database
     };
     
     next();
