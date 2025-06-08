@@ -33,6 +33,7 @@ const Register = () => {
       toast.warning("Password must be at least 6 characters");
       return;
     }
+     
       if (!formData.mobileNo == 10) {
       toast.warning("To valid Mobile number 10 digits are required");
       return;

@@ -8,16 +8,20 @@ import {
   getAllUsersController,
   getMeController
 } from '../Controllers/user.controller.js';
-import { aiMessageSaveController,
-  getMessagesController, messageController,
 
-   } from '../Controllers/message.controller.js';
+import { 
+  aiMessageSaveController,
+  getMessagesController, 
+  messageController,
+  getAiMessagesController,
+  saveMessageController,
+  markMessagesAsReadController,
+  getUnreadMessagesController
+} from '../Controllers/message.controller.js';
+
 import { aiChatController } from '../Services/ai.service.js';
 
-// import { aiChatController } from '../Services/ai.service.js';
-
 const routes = express.Router();
-
 
 // Auth routes
 routes.post("/register", registerUserController);
@@ -28,27 +32,23 @@ routes.post("/logout", verifyTokenMiddleware, logoutUserController);
 routes.post("/chat", verifyTokenMiddleware, messageController);
 
 // For AI chat functionality
-routes.post("/askSomething", verifyTokenMiddleware, aiChatController)
+routes.post("/askSomething", verifyTokenMiddleware, aiChatController);
 
-// Optional: If you want to save AI messages separately
-routes.post("/save-ai-message", verifyTokenMiddleware, aiMessageSaveController)
+// AI Message Routes
+routes.post("/save-ai-message", verifyTokenMiddleware, aiMessageSaveController);
+routes.get("/ai-messages", verifyTokenMiddleware, getAiMessagesController);
 
-routes.get("/chat/:senderId/:receiverId", verifyTokenMiddleware, getMessagesController);
-
-// Route to check authentication status and get current user
-routes.get("/auth/me",verifyTokenMiddleware,getMeController)
-
-// Route to get all users (protected) - now uses the controller
+// User Routes
+routes.get("/auth/me", verifyTokenMiddleware, getMeController);
 routes.get("/all-users", verifyTokenMiddleware, getAllUsersController);
 
-// Route to get messages between users (protected)
-routes.get("/messages", verifyTokenMiddleware, getMessagesController);
+// Regular Message Routes  
 
-// routes.get("/unread-messages", verifyTokenMiddleware, unreadMessageController);
-// routes.get("/all-recent-messages",verifyTokenMiddleware,getAllRecentMessage)
+routes.get("/chat/:senderId/:receiverId", verifyTokenMiddleware, getMessagesController);
+routes.post("/save-message", verifyTokenMiddleware, saveMessageController);
 
-
-
-
+// Message Status Routes
+routes.post("/mark-read", verifyTokenMiddleware, markMessagesAsReadController);
+routes.get("/unread-messages", verifyTokenMiddleware, getUnreadMessagesController);
 
 export default routes;

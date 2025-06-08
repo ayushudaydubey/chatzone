@@ -19,14 +19,31 @@ const UserList = ({
   const { logout, isLoading, markMessagesAsRead } = useContext(chatContext);
 
   const allUsers = users || [];
-  const totalUnread = getTotalUnreadCount ? getTotalUnreadCount() : 0;
-
+  
   // Helper function to check if user is Elva AI
   const isElvaAI = (userName) => {
     if (!userName) return false;
     const name = userName.toLowerCase();
     return name.includes('elva') || name.includes('elva ai');
   };
+
+  // Modified function to get total unread count (excluding AI users)
+  const getTotalUnreadCountExcludingAI = () => {
+    if (!getTotalUnreadCount || !getUnreadCount) return 0;
+    
+    return allUsers.reduce((total, user) => {
+      const userObj = typeof user === 'object' ? user : { username: user };
+      const userName = userObj.username;
+      
+      // Skip AI users when counting unread messages
+      if (isElvaAI(userName)) return total;
+      
+      const unreadCount = getUnreadCount(userName) || 0;
+      return total + unreadCount;
+    }, 0);
+  };
+
+  const totalUnread = getTotalUnreadCountExcludingAI();
 
   // Helper function to truncate message text
   const truncateMessage = (message, maxLength = 30) => {
@@ -56,13 +73,14 @@ const UserList = ({
 
   // Handle user selection with immediate unread count removal
   const handleUserClick = async (userName) => {
-    const unreadCount = getUnreadCount ? getUnreadCount(userName) : 0;
+    const isAI = isElvaAI(userName);
+    const unreadCount = getUnreadCount && !isAI ? getUnreadCount(userName) : 0;
 
     // Set the selected user
     setToUser(userName);
 
-    // Immediately mark messages as read if there are unread messages
-    if (unreadCount > 0 && markMessagesAsRead) {
+    // Immediately mark messages as read if there are unread messages (only for non-AI users)
+    if (unreadCount > 0 && markMessagesAsRead && !isAI) {
       await markMessagesAsRead(userName);
     }
 
@@ -115,9 +133,11 @@ const UserList = ({
               {allUsers.map((user, index) => {
                 const userObj = typeof user === 'object' ? user : { username: user, isOnline: true };
                 const { username: userName, isOnline } = userObj;
-                const unreadCount = getUnreadCount ? getUnreadCount(userName) : 0;
-                const lastMessage = getLastMessage ? getLastMessage(userName) : null;
                 const isAI = isElvaAI(userName);
+                
+                // Only get unread count for non-AI users
+                const unreadCount = getUnreadCount && !isAI ? getUnreadCount(userName) : 0;
+                const lastMessage = getLastMessage ? getLastMessage(userName) : null;
 
                 return (
                   <div
@@ -197,10 +217,8 @@ const UserList = ({
                               </p>
                             </>
                           ) : (
-                            <p className={`text-xs truncate ${unreadCount > 0
-                                ? isAI
-                                  ? 'text-blue-200 '
-                                  : 'text-white font-medium'
+                            <p className={`text-xs truncate ${unreadCount > 0 && !isAI
+                                ? 'text-white font-medium'
                                 : isAI
                                   ? 'text-blue-200'
                                   : 'text-gray-400'
@@ -225,17 +243,12 @@ const UserList = ({
                       )}
                     </div>
 
-                    {/* Message Indicators - ONLY show if there are actually unread messages */}
+                    {/* Message Indicators - ONLY show for non-AI users with unread messages */}
                     <div className="flex-shrink-0 flex items-center">
-                      {/* Unread Message Count - ONLY show if unreadCount > 0 */}
-                      {unreadCount > 0 && (
-                        <div className={`inset-1 border-[1px] text-[12px] font-normal px-3 py-1 rounded-full min-w-[20px] animate-bounce ${isAI
-                            ? 'bg-gradient-to-r from-teal-900/80 via-cyan-900/80 to-emerald-900/80 border-cyan-400 text-cyan-100 shadow-lg shadow-cyan-500/30'
-                            : 'border-green-500 text-green-400'
-                          }`}>
-                          <span className='flex items-center gap-2 justify-center'>
-                            New {unreadCount > 99 ? '99+' : unreadCount}
-                          </span>
+                      {/* Unread Message Count - ONLY show for non-AI users if unreadCount > 0 */}
+                      {!isAI && unreadCount > 0 && (
+                        <div className="bg-green-500/70 animate-bounce text-white text-xs px-3 py-1 rounded-full font-thin min-w-[20px] text-center">
+                          {unreadCount}
                         </div>
                       )}
                     </div>

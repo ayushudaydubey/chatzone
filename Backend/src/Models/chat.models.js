@@ -1,5 +1,3 @@
-// Update your message model (chat.models.js) to include isRead field
-
 import mongoose from 'mongoose'
 
 const messageSchema = new mongoose.Schema({
@@ -17,7 +15,7 @@ const messageSchema = new mongoose.Schema({
   },
   messageType: {
     type: String,
-    enum: ['text', 'file'],
+    enum: ['text', 'file', 'ai-chat'],
     default: 'text'
   },
   fileInfo: {
@@ -30,19 +28,38 @@ const messageSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  // Add these new fields for read status
+  // Read status fields
   isRead: {
     type: Boolean,
     default: false
   },
   readAt: {
     type: Date
+  },
+  // AI-specific fields
+  isAiBot: {
+    type: Boolean,
+    default: false
+  },
+  isError: {
+    type: Boolean,
+    default: false
+  },
+  // Support for both field names (for backward compatibility)
+  timestamp: {
+    type: Date,
+    default: Date.now
+  },
+  fromUser: {
+    type: String
+  },
+  toUser: {
+    type: String
   }
+}, {
+  timestamps: true // This adds createdAt and updatedAt automatically
 })
 
-// Add indexes for better performance
-messageSchema.index({ senderId: 1, receiverId: 1, timeStamp: -1 })
-messageSchema.index({ receiverId: 1, isRead: 1 })
 
 const messageModel = mongoose.model('Message', messageSchema)
 

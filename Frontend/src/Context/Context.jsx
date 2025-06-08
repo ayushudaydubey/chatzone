@@ -49,6 +49,19 @@ const Context = (props) => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Function to save AI message to database
+  const saveAiMessage = useCallback(async (messageData) => {
+    try {
+      const response = await axiosInstance.post('/user/save-ai-message', messageData);
+      if (response.data.success) {
+        console.log('AI message saved successfully');
+        return response.data;
+      }
+    } catch (error) {
+      console.error("Error saving AI message:", error);
+    }
+  }, []);
+
   // Function to fetch unread messages and last messages from database
   const fetchUnreadAndLastMessages = useCallback(async () => {
     if (!username) return;
@@ -359,19 +372,29 @@ const Context = (props) => {
     };
   }, [username, toUser, isInitialized, AI_BOT_NAME]);
 
-  // Load chat history function
+  // Load chat history function - Updated to handle AI messages
   const loadChatHistory = useCallback(async () => {
     if (!username || !toUser) return;
     
     try {
-      const response = await axiosInstance.get(`/user/messages?senderId=${username}&receiverId=${toUser}`);
+      let response;
+      
+      // Check if it's AI chat
+      if (toUser === AI_BOT_NAME) {
+        // Load AI chat history
+        response = await axiosInstance.get(`/user/ai-messages?userId=${username}`);
+      } else {
+        // Load regular chat history
+        response = await axiosInstance.get(`/user/messages?senderId=${username}&receiverId=${toUser}`);
+      }
+      
       if (response.data) {
         setMessages(response.data);
       }
     } catch (error) {
       console.error("Error loading chat history:", error);
     }
-  }, [username, toUser]);
+  }, [username, toUser, AI_BOT_NAME]);
 
   // Load chat history when username or toUser changes
   useEffect(() => {
@@ -387,7 +410,7 @@ const Context = (props) => {
     }
   }, []);
 
-  // Function to send message to AI
+  // Function to send message to AI - Updated to save messages
   const sendToAI = useCallback(async (userMessage) => {
     try {
       setIsAiTyping(true);
@@ -397,10 +420,14 @@ const Context = (props) => {
         toUser: AI_BOT_NAME,
         message: userMessage,
         timestamp: new Date().toISOString(),
+        isAiBot: false
       };
       
       // Add user message to state immediately
       setMessages(prev => [...safeArrayCheck(prev), userMessageData]);
+
+      // Save user message to database
+      await saveAiMessage(userMessageData);
 
       // Send to AI endpoint
       const response = await axiosInstance.post('/user/askSomething', {
@@ -420,6 +447,9 @@ const Context = (props) => {
         
         // Add AI response to state
         setMessages(prev => [...safeArrayCheck(prev), aiMessage]);
+        
+        // Save AI message to database
+        await saveAiMessage(aiMessage);
         
         // Update last message for AI chat
         setLastMessages(prev => ({
@@ -443,10 +473,13 @@ const Context = (props) => {
         isError: true
       };
       setMessages(prev => [...safeArrayCheck(prev), errorMessage]);
+      
+      // Save error message to database
+      await saveAiMessage(errorMessage);
     } finally {
       setIsAiTyping(false);
     }
-  }, [username, getAiChatHistory, AI_BOT_NAME]);
+  }, [username, getAiChatHistory, AI_BOT_NAME, saveAiMessage]);
 
   // Handle send function
   const handleSend = async (e) => {
@@ -622,9 +655,13 @@ const Context = (props) => {
     }
   };
 
-  const contextValue = { username, setUsername,isRegistered,setIsRegistered,validateSession,senderId,setSenderId,
-    receiverId,setReceiverId, message, setMessage, messages, setMessages,users,toUser,setToUser, register, login, handleSend,handleFileUpload, logout, socket, messagesEndRef, loadChatHistory, loadAllUsers, getOnlineUsers,
-    unreadMessages,lastMessages,markMessagesAsRead,fetchUnreadAndLastMessages,getUnreadCount,getLastMessage,getTotalUnreadCount, AI_BOT_NAME, isAiTyping, sendToAI, isInitialized, isLoading
+  const contextValue = { 
+    username, setUsername, isRegistered, setIsRegistered, validateSession, senderId, setSenderId,
+    receiverId, setReceiverId, message, setMessage, messages, setMessages, users, toUser, setToUser, 
+    register, login, handleSend, handleFileUpload, logout, socket, messagesEndRef, loadChatHistory, 
+    loadAllUsers, getOnlineUsers, unreadMessages, lastMessages, markMessagesAsRead, 
+    fetchUnreadAndLastMessages, getUnreadCount, getLastMessage, getTotalUnreadCount, 
+    AI_BOT_NAME, isAiTyping, sendToAI, isInitialized, isLoading, saveAiMessage
   };
 
   return (
