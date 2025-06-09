@@ -39,7 +39,7 @@ routes.post("/save-ai-message", verifyTokenMiddleware, aiMessageSaveController);
 routes.get("/ai-messages", verifyTokenMiddleware, getAiMessagesController);
 
 // User Routes
-routes.get("/auth/me", verifyTokenMiddleware, getMeController);
+routes.get("/me", verifyTokenMiddleware, getMeController);
 routes.get("/all-users", verifyTokenMiddleware, getAllUsersController);
 
 // Regular Message Routes  
