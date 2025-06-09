@@ -139,39 +139,40 @@ const Context = (props) => {
   }, [username, AI_BOT_NAME]);
 
   // Main initialization effect
-  useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        const response = await axiosInstance.get("/user/auth/me");
-        if (response.data && response.data.name) {
-          setUsername(response.data.name);
-          setIsRegistered(true);
-          socket.emit("register-user", response.data.name);
-          
-          // Load users first
-          await loadAllUsers();
-          
-          // Fetch unread messages after a short delay to ensure everything is loaded
-          setTimeout(async () => {
-            await fetchUnreadAndLastMessages();
-            setIsInitialized(true);
-          }, 500);
-          
-        } else {
-          setUsername("");
-          setIsRegistered(false);
+useEffect(() => {
+  const initializeApp = async () => {
+    try {
+      // Change this line - remove 'auth' from the path
+      const response = await axiosInstance.get("/user/me");
+      if (response.data && response.data.name) {
+        setUsername(response.data.name);
+        setIsRegistered(true);
+        socket.emit("register-user", response.data.name);
+        
+        // Load users first
+        await loadAllUsers();
+        
+        // Fetch unread messages after a short delay to ensure everything is loaded
+        setTimeout(async () => {
+          await fetchUnreadAndLastMessages();
           setIsInitialized(true);
-        }
-      } catch (error) {
-        console.error("Error fetching current user:", error);
+        }, 500);
+        
+      } else {
         setUsername("");
         setIsRegistered(false);
         setIsInitialized(true);
       }
-    };
+    } catch (error) {
+      console.error("Error fetching current user:", error);
+      setUsername("");
+      setIsRegistered(false);
+      setIsInitialized(true);
+    }
+  };
 
-    initializeApp();
-  }, [loadAllUsers, fetchUnreadAndLastMessages]);
+  initializeApp();
+}, [loadAllUsers, fetchUnreadAndLastMessages]);
 
   // Add AI bot to users list when username is available
   useEffect(() => {
